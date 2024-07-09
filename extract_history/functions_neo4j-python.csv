@@ -1,0 +1,511 @@
+name,file,docstring,input,tart_line,end_line,output
+to_param,/Users/bytedance/test_repo/git/neo4j-python-driver/testkitbackend/fromtestkit.py,"Converts testkit parameter format to driver (python) parameter
+    ","def to_param(m):
+    """""" Converts testkit parameter format to driver (python) parameter
+    """"""
+    data = m[""data""]
+    name = m[""name""]
+    if name == ""CypherNull"":
+        if data[""value""] is not None:
+            raise ValueError(""CypherNull should be None"")
+        return None
+    if name == ""CypherString"":
+        return str(data[""value""])
+    if name == ""CypherBool"":
+        return bool(data[""value""])
+    if name == ""CypherInt"":
+        return int(data[""value""])
+    if name == ""CypherFloat"":
+        return float(data[""value""])
+    if name == ""CypherString"":
+        return str(data[""value""])
+    if name == ""CypherBytes"":
+        return bytearray([int(byte, 16) for byte in data[""value""].split()])
+    if name == ""CypherList"":
+        return [to_param(v) for v in data[""value""]]
+    if name == ""CypherMap"":
+        return {k: to_param(data[""value""][k]) for k in data[""value""]}
+    if name == ""CypherPoint"":
+        coords = [data[""x""], data[""y""]]
+        if data.get(""z"") is not None:
+            coords.append(data[""z""])
+        if data[""system""] == ""cartesian"":
+            return CartesianPoint(coords)
+        if data[""system""] == ""wgs84"":
+            return WGS84Point(coords)
+        raise ValueError(""Unknown point system: {}"".format(data[""system""]))
+    if name == ""CypherDate"":
+        return Date(data[""year""], data[""month""], data[""day""])
+    if name == ""CypherTime"":
+        tz = None
+        utc_offset_s = data.get(""utc_offset_s"")
+        if utc_offset_s is not None:
+            utc_offset_m = utc_offset_s // 60
+            if utc_offset_m * 60 != utc_offset_s:
+                raise ValueError(""the used timezone library only supports ""
+                                 ""UTC offsets by minutes"")
+            tz = pytz.FixedOffset(utc_offset_m)
+        return Time(data[""hour""], data[""minute""], data[""second""],
+                    data[""nanosecond""], tzinfo=tz)
+    if name == ""CypherDateTime"":
+        datetime = DateTime(
+            data[""year""], data[""month""], data[""day""],
+            data[""hour""], data[""minute""], data[""second""], data[""nanosecond""]
+        )
+        utc_offset_s = data[""utc_offset_s""]
+        timezone_id = data[""timezone_id""]
+        if timezone_id is not None:
+            utc_offset = timedelta(seconds=utc_offset_s)
+            tz = pytz.timezone(timezone_id)
+            localized_datetime = tz.localize(datetime, is_dst=False)
+            if localized_datetime.utcoffset() == utc_offset:
+                return localized_datetime
+            localized_datetime = tz.localize(datetime, is_dst=True)
+            if localized_datetime.utcoffset() == utc_offset:
+                return localized_datetime
+            raise ValueError(
+                ""cannot localize datetime %s to timezone %s with UTC ""
+                ""offset %s"" % (datetime, timezone_id, utc_offset)
+            )
+        elif utc_offset_s is not None:
+            utc_offset_m = utc_offset_s // 60
+            if utc_offset_m * 60 != utc_offset_s:
+                raise ValueError(""the used timezone library only supports ""
+                                 ""UTC offsets by minutes"")
+            tz = pytz.FixedOffset(utc_offset_m)
+            return tz.localize(datetime)
+        return datetime
+    if name == ""CypherDuration"":
+        return Duration(
+            months=data[""months""], days=data[""days""],
+            seconds=data[""seconds""], nanoseconds=data[""nanoseconds""]
+        )
+    raise ValueError(""Unknown param type "" + name)",82,162,
+process_request,/Users/bytedance/test_repo/git/neo4j-python-driver/testkitbackend/_sync/backend.py,"Reads next request from the stream and processes it.
+        ","def process_request(self):
+        """""" Reads next request from the stream and processes it.
+        """"""
+        in_request = False
+        request = """"
+        for line in self._rd:
+            # Remove trailing newline
+            line = line.decode('UTF-8').rstrip()
+            if line == ""#request begin"":
+                in_request = True
+            elif line == ""#request end"":
+                self._process(request)
+                return True
+            else:
+                if in_request:
+                    request = request + line
+        return False",102,118,
+send_response,/Users/bytedance/test_repo/git/neo4j-python-driver/testkitbackend/_sync/backend.py,"Sends a response to backend.
+        ","def send_response(self, name, data):
+        """""" Sends a response to backend.
+        """"""
+        with buffer_handler.lock:
+            log_output = buffer_handler.stream.getvalue()
+            buffer_handler.stream.truncate(0)
+            buffer_handler.stream.seek(0)
+        if not log_output.endswith(""\n""):
+            log_output += ""\n""
+        self._wr.write(log_output.encode(""utf-8""))
+        response = {""name"": name, ""data"": data}
+        response = dumps(response)
+        self._wr.write(b""#response begin\n"")
+        self._wr.write(bytes(response + ""\n"", ""utf-8""))
+        self._wr.write(b""#response end\n"")
+        if isinstance(self._wr, asyncio.StreamWriter):
+            self._wr.drain()
+        else:
+            self._wr.flush()
+        log.info("">>> "" + name + dumps(data))",170,189,
+set_script,/Users/bytedance/test_repo/git/neo4j-python-driver/tests/unit/sync/fixtures/fake_connection.py,"Set a scripted sequence of callbacks.
+
+:param callbacks: The callbacks. They should be a list of 2-tuples.
+    `(""name_of_message"", {""callback_name"": arguments})`. E.g.,
+    ```
+    [
+        (""run"", {""on_success"": ({},), ""on_summary"": None}),
+        (""pull"", {
+            ""on_records"": ([some_record],),
+            ""on_success"": None,
+            ""on_summary"": None,
+        })
+        # use any exception to throw it instead of calling handlers
+        (""commit"", RuntimeError(""oh no!""))
+    ]
+    ```
+    Note that arguments can be `None`. In this case, ScriptedConnection
+    will make a guess on best-suited default arguments.","def set_script(self, callbacks):
+            """"""Set a scripted sequence of callbacks.
+
+            :param callbacks: The callbacks. They should be a list of 2-tuples.
+                `(""name_of_message"", {""callback_name"": arguments})`. E.g.,
+                ```
+                [
+                    (""run"", {""on_success"": ({},), ""on_summary"": None}),
+                    (""pull"", {
+                        ""on_records"": ([some_record],),
+                        ""on_success"": None,
+                        ""on_summary"": None,
+                    })
+                    # use any exception to throw it instead of calling handlers
+                    (""commit"", RuntimeError(""oh no!""))
+                ]
+                ```
+                Note that arguments can be `None`. In this case, ScriptedConnection
+                will make a guess on best-suited default arguments.
+            """"""
+            self._script = callbacks
+            self._script_pos = 0",147,168,
+set_script,/Users/bytedance/test_repo/git/neo4j-python-driver/tests/unit/async_/fixtures/fake_connection.py,"Set a scripted sequence of callbacks.
+
+:param callbacks: The callbacks. They should be a list of 2-tuples.
+    `(""name_of_message"", {""callback_name"": arguments})`. E.g.,
+    ```
+    [
+        (""run"", {""on_success"": ({},), ""on_summary"": None}),
+        (""pull"", {
+            ""on_records"": ([some_record],),
+            ""on_success"": None,
+            ""on_summary"": None,
+        })
+        # use any exception to throw it instead of calling handlers
+        (""commit"", RuntimeError(""oh no!""))
+    ]
+    ```
+    Note that arguments can be `None`. In this case, ScriptedConnection
+    will make a guess on best-suited default arguments.","def set_script(self, callbacks):
+            """"""Set a scripted sequence of callbacks.
+
+            :param callbacks: The callbacks. They should be a list of 2-tuples.
+                `(""name_of_message"", {""callback_name"": arguments})`. E.g.,
+                ```
+                [
+                    (""run"", {""on_success"": ({},), ""on_summary"": None}),
+                    (""pull"", {
+                        ""on_records"": ([some_record],),
+                        ""on_success"": None,
+                        ""on_summary"": None,
+                    })
+                    # use any exception to throw it instead of calling handlers
+                    (""commit"", RuntimeError(""oh no!""))
+                ]
+                ```
+                Note that arguments can be `None`. In this case, ScriptedConnection
+                will make a guess on best-suited default arguments.
+            """"""
+            self._script = callbacks
+            self._script_pos = 0",147,168,
+server_info,/Users/bytedance/test_repo/git/neo4j-python-driver/tests/integration/test_bolt_driver.py,"Simple fixture to provide quick and easy access to a
+:class:`.ServerInfo` object.","def server_info(driver):
+    """""" Simple fixture to provide quick and easy access to a
+    :class:`.ServerInfo` object.
+    """"""
+    with driver.session() as session:
+        summary = session.run(""RETURN 1"").consume()
+        yield summary.server",21,27,
+__eq__,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"In order to be flexible regarding comparison, the equality rules
+for a record permit comparison with any other Sequence or Mapping.
+
+:param other:
+:returns:","def __eq__(self, other: object) -> bool:
+        """""" In order to be flexible regarding comparison, the equality rules
+        for a record permit comparison with any other Sequence or Mapping.
+
+        :param other:
+        :returns:
+        """"""
+        compare_as_sequence = isinstance(other, Sequence)
+        compare_as_mapping = isinstance(other, Mapping)
+        if compare_as_sequence and compare_as_mapping:
+            other = t.cast(t.Mapping, other)
+            return list(self) == list(other) and dict(self) == dict(other)
+        elif compare_as_sequence:
+            other = t.cast(t.Sequence, other)
+            return list(self) == list(other)
+        elif compare_as_mapping:
+            other = t.cast(t.Mapping, other)
+            return dict(self) == dict(other)
+        else:
+            return False",94,113,
+get,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Obtain a value from the record by key, returning a default
+value if the key does not exist.
+
+:param key: a key
+:param default: default value
+
+:returns: a value","def get(self, key: str, default: t.Optional[object] = None) -> t.Any:
+        """""" Obtain a value from the record by key, returning a default
+        value if the key does not exist.
+
+        :param key: a key
+        :param default: default value
+
+        :returns: a value
+        """"""
+        try:
+            index = self.__keys.index(str(key))
+        except ValueError:
+            return default
+        if 0 <= index < len(self):
+            return self._super_getitem_single(index)
+        else:
+            return default",149,165,
+index,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Return the index of the given item.
+
+:param key: a key
+
+:returns: index","def index(self, key: _K) -> int:  # type: ignore[override]
+        """""" Return the index of the given item.
+
+        :param key: a key
+
+        :returns: index
+        """"""
+        if isinstance(key, int):
+            if 0 <= key < len(self.__keys):
+                return key
+            raise IndexError(key)
+        elif isinstance(key, str):
+            try:
+                return self.__keys.index(key)
+            except ValueError as exc:
+                raise KeyError(key) from exc
+        else:
+            raise TypeError(key)",167,184,
+value,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Obtain a single value from the record by index or key. If no
+index or key is specified, the first value is returned. If the
+specified item does not exist, the default value is returned.
+
+:param key: an index or key
+:param default: default value
+
+:returns: a single value","def value(
+        self, key: _K = 0, default: t.Optional[object] = None
+    ) -> t.Any:
+        """""" Obtain a single value from the record by index or key. If no
+        index or key is specified, the first value is returned. If the
+        specified item does not exist, the default value is returned.
+
+        :param key: an index or key
+        :param default: default value
+
+        :returns: a single value
+        """"""
+        try:
+            index = self.index(key)
+        except (IndexError, KeyError):
+            return default
+        else:
+            return self[index]",186,203,
+keys,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Return the keys of the record.
+
+:returns: list of key names","def keys(self) -> t.List[str]:  # type: ignore[override]
+        """""" Return the keys of the record.
+
+        :returns: list of key names
+        """"""
+        return list(self.__keys)",205,210,
+values,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Return the values of the record, optionally filtering to
+include only certain values by index or key.
+
+:param keys: indexes or keys of the items to include; if none
+             are provided, all values will be included
+
+:returns: list of values","def values(self, *keys: _K) -> t.List[t.Any]:  # type: ignore[override]
+        """""" Return the values of the record, optionally filtering to
+        include only certain values by index or key.
+
+        :param keys: indexes or keys of the items to include; if none
+                     are provided, all values will be included
+
+        :returns: list of values
+        """"""
+        if keys:
+            d: t.List[t.Any] = []
+            for key in keys:
+                try:
+                    i = self.index(key)
+                except KeyError:
+                    d.append(None)
+                else:
+                    d.append(self[i])
+            return d
+        return list(self)",212,231,
+items,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Return the fields of the record as a list of key and value tuples
+
+:returns: a list of value tuples","def items(self, *keys):
+        """""" Return the fields of the record as a list of key and value tuples
+
+        :returns: a list of value tuples
+        """"""
+        if keys:
+            d = []
+            for key in keys:
+                try:
+                    i = self.index(key)
+                except KeyError:
+                    d.append((key, None))
+                else:
+                    d.append((self.__keys[i], self[i]))
+            return d
+        return list((self.__keys[i], self._super_getitem_single(i))
+                    for i in range(len(self)))",233,249,
+data,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Return the record as a dictionary.
+
+Return the keys and values of this record as a dictionary, optionally
+including only certain values by index or key.
+Keys provided in the items that are not in the record will be inserted
+with a value of :data:`None`; indexes provided that are out of bounds
+will trigger an :exc:`IndexError`.
+
+This function provides a convenient but opinionated way to transform
+the record into a mostly JSON serializable format. It is mainly useful
+for interactive sessions and rapid prototyping.
+
+The transformation works as follows:
+
+ * Nodes are transformed into dictionaries of their
+   properties.
+
+   * No indication of their original type remains.
+   * Not all information is serialized (e.g., labels and element_id are
+     absent).
+
+ * Relationships are transformed to a tuple of
+   ``(start_node, type, end_node)``, where the nodes are transformed
+   as described above, and type is the relationship type name
+   (:class:`str`).
+
+   * No indication of their original type remains.
+   * No other information (properties, element_id, start_node,
+     end_node, ...) is serialized.
+
+ * Paths are transformed into lists of nodes and relationships. No
+   indication of the original type remains.
+ * :class:`list` and :class:`dict` values are recursively transformed.
+ * Every other type remains unchanged.
+
+   * Spatial types and durations inherit from :class:`tuple`. Hence,
+     they are JSON serializable, but, like graph types, type
+     information will be lost in the process.
+   * The remaining temporal types are not JSON serializable.
+
+You will have to implement a custom serializer should you need more
+control over the output format.
+
+:param keys: Indexes or keys of the items to include. If none are
+    provided, all values will be included.
+
+:returns: dictionary of values, keyed by field name
+
+:raises: :exc:`IndexError` if an out-of-bounds index is specified.","def data(self, *keys: _K) -> t.Dict[str, t.Any]:
+        """"""Return the record as a dictionary.
+
+        Return the keys and values of this record as a dictionary, optionally
+        including only certain values by index or key.
+        Keys provided in the items that are not in the record will be inserted
+        with a value of :data:`None`; indexes provided that are out of bounds
+        will trigger an :exc:`IndexError`.
+
+        This function provides a convenient but opinionated way to transform
+        the record into a mostly JSON serializable format. It is mainly useful
+        for interactive sessions and rapid prototyping.
+
+        The transformation works as follows:
+
+         * Nodes are transformed into dictionaries of their
+           properties.
+
+           * No indication of their original type remains.
+           * Not all information is serialized (e.g., labels and element_id are
+             absent).
+
+         * Relationships are transformed to a tuple of
+           ``(start_node, type, end_node)``, where the nodes are transformed
+           as described above, and type is the relationship type name
+           (:class:`str`).
+
+           * No indication of their original type remains.
+           * No other information (properties, element_id, start_node,
+             end_node, ...) is serialized.
+
+         * Paths are transformed into lists of nodes and relationships. No
+           indication of the original type remains.
+         * :class:`list` and :class:`dict` values are recursively transformed.
+         * Every other type remains unchanged.
+
+           * Spatial types and durations inherit from :class:`tuple`. Hence,
+             they are JSON serializable, but, like graph types, type
+             information will be lost in the process.
+           * The remaining temporal types are not JSON serializable.
+
+        You will have to implement a custom serializer should you need more
+        control over the output format.
+
+        :param keys: Indexes or keys of the items to include. If none are
+            provided, all values will be included.
+
+        :returns: dictionary of values, keyed by field name
+
+        :raises: :exc:`IndexError` if an out-of-bounds index is specified.
+        """"""
+        return RecordExporter().transform(dict(self.items(*keys)))",251,302,
+transform,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_data.py,"Transform a value, or collection of values.
+
+:param x: input value
+:returns: output value","def transform(self, x):
+        """""" Transform a value, or collection of values.
+
+        :param x: input value
+        :returns: output value
+        """"""",311,316,
+get_user_agent,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_meta.py,"Obtain the default user agent string sent to the server after
+a successful handshake.","def get_user_agent():
+    """""" Obtain the default user agent string sent to the server after
+    a successful handshake.
+    """"""
+    return USER_AGENT",78,82,
+deprecated,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_meta.py,"Decorator for deprecating functions and methods.
+
+::
+
+    @deprecated(""'foo' has been deprecated in favour of 'bar'"")
+    def foo(x):
+        pass","def deprecated(message: str) -> t.Callable[[_FuncT], _FuncT]:
+    """""" Decorator for deprecating functions and methods.
+
+    ::
+
+        @deprecated(""'foo' has been deprecated in favour of 'bar'"")
+        def foo(x):
+            pass
+
+    """"""
+    return _make_warning_decorator(message, deprecation_warn)",100,110,
+experimental,/Users/bytedance/test_repo/git/neo4j-python-driver/src/neo4j/_meta.py,"Decorator for tagging experimental functions and methods.
+
+::
+
+    @experimental(""'foo' is an experimental function and may be ""
+                  ""removed in a future release"")
+    def foo(x):
+        pass
+
+.. deprecated:: 5.8
+    we now use ""preview"" instead of ""experimental"".","def experimental(message) -> t.Callable[[_FuncT], _FuncT]:
+    """""" Decorator for tagging experimental functions and methods.
+
+    ::
+
+        @experimental(""'foo' is an experimental function and may be ""
+                      ""removed in a future release"")
+        def foo(x):
+            pass
+
+    .. deprecated:: 5.8
+        we now use ""preview"" instead of ""experimental"".
+    """"""
+    return _make_warning_decorator(message, experimental_warn)",132,145,

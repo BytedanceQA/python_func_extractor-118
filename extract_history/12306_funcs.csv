@@ -1,0 +1,1898 @@
+name,file,docstring,input,start_line,end_line,output
+parser_arguments,/Users/bytedance/test_repo/BytedanceQA/12306/run.py,"不应该在这里定义，先放在这里
+:param argv:
+:return:","def parser_arguments(argv):
+    """"""
+    不应该在这里定义，先放在这里
+    :param argv:
+    :return:
+    """"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(""operate"", type=str, help=""r: 运行抢票程序, c: 过滤cdn, t: 测试邮箱和server酱，server酱需要打开开关"")
+
+    return parser.parse_args(argv)",6,15,
+get_ticket_info,/Users/bytedance/test_repo/BytedanceQA/12306/init/select_ticket_info.py,"获取配置信息
+:return:","def get_ticket_info():
+        """"""
+        获取配置信息
+        :return:
+        """"""
+
+        print(u""*"" * 50)
+        print(f""检查当前版本为: {TickerConfig.RE_VERSION}"")
+        version = sys.version.split("" "")[0]
+        print(u""检查当前python版本为：{}，目前版本只支持3.6以上"".format(version))
+        if version < ""3.6.0"":
+            raise Exception
+        print(u""12306刷票小助手，最后更新于2019.09.18，请勿作为商业用途，交流群号：""
+              u"" 1群：286271084(已满)\n""
+              u"" 2群：649992274(已满)\n""
+              u"" 3群：632501142(已满)\n""
+              u"" 4群: 606340519(已满)\n""
+              u"" 5群: 948526733(已满)\n""
+              u"" 7群: 660689659(已满)\n""
+              u"" 8群: 620629239(已满)\n""
+              u"" 6群: 608792930(未满)\n""
+              u"" 9群: 693035807(未满)\n""
+              )
+        print(
+            f""当前配置：\n出发站：{TickerConfig.FROM_STATION}\n到达站：{TickerConfig.TO_STATION}\n车次: {','.join(TickerConfig.STATION_TRAINS) or '所有车次'}\n乘车日期：{','.join(TickerConfig.STATION_DATES)}\n坐席：{','.join(TickerConfig.SET_TYPE)}\n是否有票优先提交：{TickerConfig.IS_MORE_TICKET}\n乘车人：{TickerConfig.TICKET_PEOPLES}\n"" \
+            f""刷新间隔: 随机(1-3S)\n僵尸票关小黑屋时长: {TickerConfig.TICKET_BLACK_LIST_TIME}\n下单接口: {TickerConfig.ORDER_TYPE}\n下单模式: {TickerConfig.ORDER_MODEL}\n预售踩点时间:{TickerConfig.OPEN_TIME}"")
+        print(u""*"" * 50)",54,80,
+station_table,/Users/bytedance/test_repo/BytedanceQA/12306/init/select_ticket_info.py,"读取车站信息
+:param station:
+:return:","def station_table(self, from_station, to_station):
+        """"""
+        读取车站信息
+        :param station:
+        :return:
+        """"""
+        path = os.path.join(os.path.dirname(__file__), '../station_name.txt')
+        try:
+            with open(path, encoding=""utf-8"") as result:
+                info = result.read().split('=')[1].strip(""'"").split('@')
+        except Exception:
+            with open(path) as result:
+                info = result.read().split('=')[1].strip(""'"").split('@')
+        del info[0]
+        station_name = {}
+        for i in range(0, len(info)):
+            n_info = info[i].split('|')
+            station_name[n_info[1]] = n_info[2]
+        try:
+            from_station = station_name[from_station.encode(""utf8"")]
+            to_station = station_name[to_station.encode(""utf8"")]
+        except KeyError:
+            from_station = station_name[from_station]
+            to_station = station_name[to_station]
+        return from_station, to_station",82,106,
+call_login,/Users/bytedance/test_repo/BytedanceQA/12306/init/select_ticket_info.py,"登录回调方法
+:return:","def call_login(self, auth=False):
+        """"""
+        登录回调方法
+        :return:
+        """"""
+        if auth:
+            return self.login.auth()
+        else:
+            configCommon.checkSleepTime(self)  # 防止网上启动晚上到点休眠
+            self.login.go_login()",108,117,
+auth,/Users/bytedance/test_repo/BytedanceQA/12306/init/login.py,:return:,"def auth(self):
+        """"""
+        :return:
+        """"""
+        self.session.httpClint.send(self.session.urls[""loginInitCdn1""])
+        uamtkStaticUrl = self.session.urls[""uamtk-static""]
+        uamtkStaticData = {""appid"": ""otn""}
+        return self.session.httpClint.send(uamtkStaticUrl, uamtkStaticData)",21,28,
+codeCheck,/Users/bytedance/test_repo/BytedanceQA/12306/init/login.py,"验证码校验
+:return:","def codeCheck(self):
+        """"""
+        验证码校验
+        :return:
+        """"""
+        codeCheckUrl = copy.deepcopy(self.session.urls[""codeCheck1""])
+        codeCheckUrl[""req_url""] = codeCheckUrl[""req_url""].format(self.randCode, int(time.time() * 1000))
+        fresult = self.session.httpClint.send(codeCheckUrl)
+        if not isinstance(fresult, str):
+            print(""登录失败"")
+            return
+        fresult = eval(fresult.split(""("")[1].split("")"")[0])
+        if ""result_code"" in fresult and fresult[""result_code""] == ""4"":
+            print(u""验证码通过,开始登录.."")
+            return True
+        else:
+            if ""result_message"" in fresult:
+                print(fresult[""result_message""])
+            sleep(1)
+            self.session.httpClint.del_cookies()",30,49,
+baseLogin,/Users/bytedance/test_repo/BytedanceQA/12306/init/login.py,"登录过程
+:param user:
+:param passwd:
+:return: 权限校验码","def baseLogin(self, user, passwd):
+        """"""
+        登录过程
+        :param user:
+        :param passwd:
+        :return: 权限校验码
+        """"""
+        logurl = self.session.urls[""login""]
+
+        loginData = OrderedDict()
+        loginData[""username""] = user,
+        loginData[""password""] = passwd,
+        loginData[""appid""] = ""otn"",
+        loginData[""answer""] = self.randCode,
+
+        tresult = self.session.httpClint.send(logurl, loginData)
+        if 'result_code' in tresult and tresult[""result_code""] == 0:
+            print(u""登录成功"")
+            tk = self.auth()
+            if ""newapptk"" in tk and tk[""newapptk""]:
+                return tk[""newapptk""]
+            else:
+                return False
+        elif 'result_message' in tresult and tresult['result_message']:
+            messages = tresult['result_message']
+            if messages.find(u""密码输入错误"") is not -1:
+                raise UserPasswordException(""{0}"".format(messages))
+            else:
+                print(u""登录失败: {0}"".format(messages))
+                print(u""尝试重新登陆"")
+                return False
+        else:
+            return False",51,83,
+getUserName,/Users/bytedance/test_repo/BytedanceQA/12306/init/login.py,"登录成功后,显示用户名
+:return:","def getUserName(self, uamtk):
+        """"""
+        登录成功后,显示用户名
+        :return:
+        """"""
+        if not uamtk:
+            return u""权限校验码不能为空""
+        else:
+            uamauthclientUrl = self.session.urls[""uamauthclient""]
+            data = {""tk"": uamtk}
+            uamauthclientResult = self.session.httpClint.send(uamauthclientUrl, data)
+            if uamauthclientResult:
+                if ""result_code"" in uamauthclientResult and uamauthclientResult[""result_code""] == 0:
+                    print(u""欢迎 {} 登录"".format(uamauthclientResult[""username""]))
+                    return True
+                else:
+                    return False
+            else:
+                self.session.httpClint.send(uamauthclientUrl, data)
+                url = self.session.urls[""getUserInfo""]
+                self.session.httpClint.send(url)",85,105,
+go_login,/Users/bytedance/test_repo/BytedanceQA/12306/init/login.py,"登陆
+:param user: 账户名
+:param passwd: 密码
+:return:","def go_login(self):
+        """"""
+        登陆
+        :param user: 账户名
+        :param passwd: 密码
+        :return:
+        """"""
+        user, passwd = TickerConfig.USER, TickerConfig.PWD
+        if not user or not passwd:
+            raise UserPasswordException(u""温馨提示: 用户名或者密码为空，请仔细检查"")
+        login_num = 0
+        while True:
+            if loginConf(self.session):
+
+                result = getPassCodeNewOrderAndLogin1(session=self.session, imgType=""login"")
+                if not result:
+                    continue
+                self.randCode = getRandCode(self.is_auto_code, self.auto_code_type, result)
+                print(self.randCode)
+                login_num += 1
+                self.auth()
+                if self.codeCheck():
+                    uamtk = self.baseLogin(user, passwd)
+                    if uamtk:
+                        self.getUserName(uamtk)
+                        break
+            else:
+                loginAysnSuggest(self.session, username=user, password=passwd)
+                login_num += 1
+                break",107,136,
+sendEmail,/Users/bytedance/test_repo/BytedanceQA/12306/config/emailConf.py,"邮件通知
+:param str: email content
+:return:","def sendEmail(msg):
+    """"""
+    邮件通知
+    :param str: email content
+    :return:
+    """"""
+    try:
+        if TickerConfig.EMAIL_CONF[""IS_MAIL""]:
+            sender = TickerConfig.EMAIL_CONF[""email""]
+            receiver = TickerConfig.EMAIL_CONF[""notice_email_list""]
+            subject = '恭喜，您已订票成功'
+            username = TickerConfig.EMAIL_CONF[""username""]
+            password = TickerConfig.EMAIL_CONF[""password""]
+            host = TickerConfig.EMAIL_CONF[""host""]
+            s = ""{0}"".format(msg)
+
+            msg = MIMEText(s, 'plain', 'utf-8')  # 中文需参数‘utf-8’，单字节字符不需要
+            msg['Subject'] = Header(subject, 'utf-8')
+            msg['From'] = sender
+            msg['To'] = receiver
+
+            try:
+                smtp = smtplib.SMTP_SSL(host)
+                smtp.connect(host)
+            except socket.error:
+                smtp = smtplib.SMTP()
+                smtp.connect(host)
+            smtp.connect(host)
+            smtp.login(username, password)
+            smtp.sendmail(sender, receiver.split("",""), msg.as_string())
+            smtp.quit()
+            print(u""邮件已通知, 请查收"")
+    except Exception as e:
+        print(u""邮件配置有误{}"".format(e))",10,43,
+sendPushBear,/Users/bytedance/test_repo/BytedanceQA/12306/config/pushbearConf.py,"pushBear微信通知
+:param str: 通知内容 content
+:return:","def sendPushBear(msg):
+    """"""
+    pushBear微信通知
+    :param str: 通知内容 content
+    :return:
+    """"""
+    if TickerConfig.PUSHBEAR_CONF[""is_pushbear""] and TickerConfig.PUSHBEAR_CONF[""send_key""].strip() != """":
+        try:
+            sendPushBearUrls = urls.get(""Pushbear"")
+            data = {
+                ""sendkey"": TickerConfig.PUSHBEAR_CONF[""send_key""].strip(),
+                ""text"": ""易行购票成功通知"",
+                ""desp"": msg
+            }
+            httpClint = HTTPClient(0)
+            sendPushBeaRsp = httpClint.send(sendPushBearUrls, data=data)
+            if sendPushBeaRsp.get(""code"") is 0:
+                print(u""已下发 pushbear 微信通知, 请查收"")
+            else:
+                print(sendPushBeaRsp)
+        except Exception as e:
+            print(u""pushbear 配置有误 {}"".format(e))
+    else:
+        pass",9,32,
+checkDate,/Users/bytedance/test_repo/BytedanceQA/12306/config/configCommon.py,"检查日期是否合法
+:param station_dates:
+:return:","def checkDate(station_dates):
+    """"""
+    检查日期是否合法
+    :param station_dates:
+    :return:
+    """"""
+    today = datetime.datetime.now()
+    maxDay = (today + datetime.timedelta(maxDate)).strftime(""%Y-%m-%d"")
+    for station_date in station_dates[::-1]:
+        date = datetime.datetime.strftime(datetime.datetime.strptime(station_date, ""%Y-%m-%d""), ""%Y-%m-%d"")
+        if date < today.strftime(""%Y-%m-%d"") or date > maxDay:
+            print(u""警告：当前时间配置有小于当前时间或者大于最大时间: {}, 已自动忽略"".format(station_date))
+            station_dates.remove(station_date)
+            if not station_dates:
+                print(u""当前日期设置无符合查询条件的，已被全部删除，请查证后添加!!!"")
+                raise ticketConfigException(u""当前日期设置无符合查询条件的，已被全部删除，请查证后添加!!!"")
+        else:
+            station_dates[station_dates.index(station_date)] = date
+    return station_dates",117,135,
+autoSynchroTime,/Users/bytedance/test_repo/BytedanceQA/12306/config/AutoSynchroTime.py,"同步北京时间，执行时候，请务必用sudo，sudo，sudo 执行，否则会报权限错误，windows打开ide或者cmd请用管理员身份
+:return:","def autoSynchroTime():
+    """"""
+    同步北京时间，执行时候，请务必用sudo，sudo，sudo 执行，否则会报权限错误，windows打开ide或者cmd请用管理员身份
+    :return:
+    """"""
+    c = ntplib.NTPClient()
+
+    hosts = ['ntp1.aliyun.com', 'ntp2.aliyun.com', 'ntp3.aliyun.com', 'ntp4.aliyun.com', 'cn.pool.ntp.org']
+
+    print(u""正在同步时间，请耐心等待30秒左右，如果下面有错误发送，可以忽略！！"")
+    print(u""系统当前时间{}"".format(str(datetime.datetime.now())[:22]))
+    system = platform.system()
+    if system == ""Windows"":  # windows 同步时间未测试过，参考地址：https://www.jianshu.com/p/92ec15da6cc3
+        for host in hosts:
+            os.popen('w32tm /register')
+            os.popen('net start w32time')
+            os.popen('w32tm /config /manualpeerlist:""{}"" /syncfromflags:manual /reliable:yes /update'.format(host))
+            os.popen('ping -n 3 127.0.0.1 >nul')
+            sin = os.popen('w32tm /resync')
+            if sin is 0:
+                break
+    else:  # mac同步地址，如果ntpdate未安装，brew install ntpdate    linux 安装 yum install -y ntpdate
+        for host in hosts:
+            sin = os.popen('ntpdate {}'.format(host))
+            if sin is 0:
+                break
+    print(u""同步后时间:{}"".format(str(datetime.datetime.now())[:22]))",9,35,
+getDrvicesID,/Users/bytedance/test_repo/BytedanceQA/12306/config/getCookie.py,:return:,"def getDrvicesID(session):
+    """"""
+    :return:
+    """"""
+    print(""cookie获取中"")
+    if TickerConfig.COOKIE_TYPE is 1:
+        from selenium import webdriver
+        cookies = []
+        # 解决放镜像里 DevToolsActivePort file doesn't exist的问题
+        options = webdriver.ChromeOptions()
+        if os.name != 'nt' and TickerConfig.CHROME_CHROME_PATH:
+            options = webdriver.ChromeOptions()
+            options.binary_location = TickerConfig.CHROME_CHROME_PATH
+            options.add_argument(
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36')
+            options.add_argument(""--no-sandbox"")
+            options.add_argument(""--headless"")
+        driver = webdriver.Chrome(executable_path=TickerConfig.CHROME_PATH,chrome_options=options)
+        driver.get(""https://www.12306.cn/index/index.html"")
+        time.sleep(10)
+        for c in driver.get_cookies():
+            cookie = dict()
+            print()
+            if c.get(""name"") == ""RAIL_DEVICEID"" or c.get(""name"") == ""RAIL_EXPIRATION"":
+                cookie[c.get(""name"")] = c.get(""value"")
+                cookies.append(cookie)
+        print(f""获取cookie: {cookies}"")
+        if cookies:
+            session.httpClint.set_cookies(cookies)
+            session.cookies = cookies
+        print(""cookie获取完成"")
+    elif TickerConfig.COOKIE_TYPE is 2:
+        request_device_id(session)
+    elif TickerConfig.COOKIE_TYPE is 3:
+        # RAIL_DEVICEID,RAIL_EXPIRATION的值打开12306官网可以获取headers-Cookies
+        if not TickerConfig.RAIL_DEVICEID or not TickerConfig.RAIL_EXPIRATION:
+            print(""警告！！: RAIL_DEVICEID,RAIL_EXPIRATION的值为空，请手动打开12306官网可以获取headers-Cookies中的RAIL_DEVICEID,RAIL_EXPIRATION，填入配置文件中"")
+        cookies = [{
+            ""RAIL_DEVICEID"": TickerConfig.RAIL_DEVICEID,
+            ""RAIL_EXPIRATION"": TickerConfig.RAIL_EXPIRATION,
+        }]
+        session.httpClint.set_cookies(cookies)
+        session.cookies = cookies",10,52,
+request_device_id,/Users/bytedance/test_repo/BytedanceQA/12306/config/getCookie.py,"获取加密后的浏览器特征 ID
+:return:","def request_device_id(session):
+    """"""
+    获取加密后的浏览器特征 ID
+    :return:
+    """"""
+    params = {""algID"": request_alg_id(session), ""timestamp"": int(time.time() * 1000)}
+    params = dict(params, **_get_hash_code_params())
+    response = session.httpClint.send(urls.get(""getDevicesId""), params=params)
+    if response.find('callbackFunction') >= 0:
+        result = response[18:-2]
+        try:
+            result = json.loads(result)
+            session.httpClint.set_cookies([{
+                'RAIL_EXPIRATION': result.get('exp'),
+                'RAIL_DEVICEID': result.get('dfp'),
+            }])
+            session.cookies = [{
+                'RAIL_EXPIRATION': result.get('exp'),
+                'RAIL_DEVICEID': result.get('dfp'),
+            }]
+        except:
+            return False",55,76,
+sendServerChan,/Users/bytedance/test_repo/BytedanceQA/12306/config/serverchanConf.py,"pushBear微信通知
+:param str: 通知内容 content
+:return:","def sendServerChan(msg):
+    """"""
+    pushBear微信通知
+    :param str: 通知内容 content
+    :return:
+    """"""
+    if (
+        TickerConfig.SERVER_CHAN_CONF[""is_server_chan""]
+        and TickerConfig.SERVER_CHAN_CONF[""secret""].strip() != """"
+    ):
+        try:
+            secret = TickerConfig.SERVER_CHAN_CONF[""secret""].strip()
+            sendServerChanUrls = urls.get(""ServerChan"")
+            sendServerChanUrls[""req_url""] += f'{secret}.send'
+
+            params = {""text"": ""易行购票成功通知"", ""desp"": msg}
+            httpClint = HTTPClient(0)
+            sendServerChanRsp = httpClint.send(sendServerChanUrls, params=params)
+            if sendServerChanRsp.get(""errno"") == 0:
+                print(u""已下发 Server酱 微信通知, 请查收"")
+            else:
+                print(sendServerChanRsp)
+        except Exception as e:
+            print(u""Server酱 配置有误 {}"".format(e))",9,32,
+sortCdn,/Users/bytedance/test_repo/BytedanceQA/12306/agency/cdn_utils.py,"对cdn进行排序
+:return:","def sortCdn():
+    """"""
+    对cdn进行排序
+    :return:
+    """"""
+    ips = []
+    cs = sorted(cdn_list, key=operator.itemgetter('time'))
+    for c in cs:
+        print(f""当前ip: {c['ip']}, 延时: {c['time']}"")
+        ips.append(c[""ip""])
+    return ips",55,65,
+filterCdn,/Users/bytedance/test_repo/BytedanceQA/12306/agency/cdn_utils.py,"过滤cdn, 过滤逻辑为当前cdn响应值小于1000毫秒
+过滤日志:
+    加入cdn: 116.77.75.146
+:return:","def filterCdn():
+    """"""
+    过滤cdn, 过滤逻辑为当前cdn响应值小于1000毫秒
+    过滤日志:
+        加入cdn: 116.77.75.146
+    :return:
+    """"""
+    cdns = open_cdn_file(""cdn_list"")
+    cdnss = [cdns[i:i + 50] for i in range(0, len(cdns), 50)]
+    cdnThread = []
+    for cdn in cdnss:
+        t = CDNProxy(cdn)
+        cdnThread.append(t)
+    for cdn_t in cdnThread:
+        cdn_t.start()
+
+    for cdn_j in cdnThread:
+        cdn_j.join()
+
+    print(f""当前有效cdn个数为: {len(cdn_list)}"")
+    if cdn_list:
+        ips = sortCdn()
+        path = os.path.join(os.path.dirname(__file__), f'../filter_cdn_list')
+        f = open(path, ""a+"")
+        f.seek(0)
+        f.truncate()
+        f.writelines("""")
+        for ip in ips:
+            f.writelines(f""{ip}\n"")
+        f.close()",68,97,
+get_proxy,/Users/bytedance/test_repo/BytedanceQA/12306/agency/agency_tools.py,"获取未加工代理列表
+:return: ","def get_proxy(self):
+        """"""
+        获取未加工代理列表
+        :return: 
+        """"""
+        User_Agent = 'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:43.0) Gecko/20100101 Firefox/43.0'
+        header = dict()
+        header['User-Agent'] = User_Agent
+
+        for i in range(1, 5):
+            time.sleep(1)
+            url = 'http://www.xicidaili.com/nn/' + str(i)
+            res = requests.get(url=url, headers=header).content
+
+            soup = BeautifulSoup(res, ""html.parser"")
+            ips = soup.findAll('tr')
+
+            for x in range(1, len(ips)):
+                ip = ips[x]
+                tds = ip.findAll(""td"")
+                ip_temp = tds[1].contents[0] + "":"" + tds[2].contents[0]
+                print(ip_temp)
+                self.proxy_list.append(ip_temp)",16,38,
+filter_proxy,/Users/bytedance/test_repo/BytedanceQA/12306/agency/agency_tools.py,"将不可用IP剔除
+:return: ","def filter_proxy(self):
+        """"""
+        将不可用IP剔除
+        :return: 
+        """"""
+        socket.setdefaulttimeout(1)
+        path = os.path.join(os.path.dirname(__file__), './proxy_list')
+        f = open(path, ""w"")
+        head = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36',
+            'Connection': 'keep-alive'}
+        url = ""http://icanhazip.com""
+        proxy_num = 0
+        for proxy in self.proxy_list:
+            proxy_temp = {""https"": ""https://{}"".format(proxy)}
+            try:
+                req = requests.get(url, proxies=proxy_temp, timeout=2, headers=head).content
+                print(req)
+                write_proxy = proxy + ""\n""
+                f.write(write_proxy)
+                proxy_num += 1
+            except Exception:
+                print (""代理链接超时，去除此IP：{0}"".format(proxy))
+                continue
+        print(""总共可使用ip量为{}个"".format(proxy_num))",40,64,
+get_filter_proxy,/Users/bytedance/test_repo/BytedanceQA/12306/agency/agency_tools.py,"读取该可用ip文件
+:return: 可用ip文件list","def get_filter_proxy(self):
+        """"""
+        读取该可用ip文件
+        :return: 可用ip文件list
+        """"""
+        path = os.path.join(os.path.dirname(__file__), './proxy_list')
+        try:
+            with open(path, ""r"", encoding=""utf-8"") as f:
+                lins = f.readlines()
+                for i in lins:
+                    p = i.strip(""\n"")
+                    self.proxy_filter_list.append(p)
+        except Exception:
+            with open(path, ""r"", ) as f:
+                lins = f.readlines()
+                for i in lins:
+                    p = i.strip(""\n"")
+                    self.proxy_filter_list.append(p)
+        return self.proxy_filter_list",66,84,
+setProxy,/Users/bytedance/test_repo/BytedanceQA/12306/agency/agency_tools.py,"开启此功能的时候请确保代理ip是否可用
+查询的时候设置代理ip,ip设置格式是ip地址+端口，推荐可用的ip代理池：https://github.com/jhao104/proxy_pool
+:return:","def setProxy(self):
+        """"""
+        开启此功能的时候请确保代理ip是否可用
+        查询的时候设置代理ip,ip设置格式是ip地址+端口，推荐可用的ip代理池：https://github.com/jhao104/proxy_pool
+        :return:
+        """"""
+        ip = self.get_filter_proxy()
+        setIp = ip[random.randint(0, len(ip) - 1)]
+        proxie = {
+            'http': 'http://{}'.format(setIp),
+            'https': 'http://{}'.format(setIp),
+        }
+        return proxie",90,102,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/httpUtils.py,"cdnList试试切换不包括查询的cdn，防止查询cdn污染登陆和下单cdn
+:param method:
+:param headers: Must be a dict. Such as headers={'Content_Type':'text/html'}","def __init__(self, is_proxy, cdnList=None):
+        """"""
+        cdnList试试切换不包括查询的cdn，防止查询cdn污染登陆和下单cdn
+        :param method:
+        :param headers: Must be a dict. Such as headers={'Content_Type':'text/html'}
+        """"""
+        self.initS()
+        self._cdn = None
+        self.cdnList = cdnList
+        self._proxies = None
+        if is_proxy is 1:
+            self.proxy = proxy()
+            self._proxies = self.proxy.setProxy()",39,51,
+set_cookies,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/httpUtils.py,"设置cookies
+:param kwargs:
+:return:","def set_cookies(self, kwargs):
+        """"""
+        设置cookies
+        :param kwargs:
+        :return:
+        """"""
+        for kwarg in kwargs:
+            for k, v in kwarg.items():
+                self._s.cookies.set(k, v)",59,67,
+get_cookies,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/httpUtils.py,"获取cookies
+:return:","def get_cookies(self):
+        """"""
+        获取cookies
+        :return:
+        """"""
+        return self._s.cookies.values()",69,74,
+del_cookies,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/httpUtils.py,"删除所有的key
+:return:","def del_cookies(self):
+        """"""
+        删除所有的key
+        :return:
+        """"""
+        self._s.cookies.clear()",76,81,
+del_cookies_by_key,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/httpUtils.py,"删除指定key的session
+:return:","def del_cookies_by_key(self, key):
+        """"""
+        删除指定key的session
+        :return:
+        """"""
+        self._s.cookies.set(key, None)",83,88,
+send,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/httpUtils.py,"send request to url.If response 200,return response, else return None.","def send(self, urls, data=None, **kwargs):
+        """"""send request to url.If response 200,return response, else return None.""""""
+        allow_redirects = False
+        is_logger = urls.get(""is_logger"", False)
+        req_url = urls.get(""req_url"", """")
+        re_try = urls.get(""re_try"", 0)
+        s_time = urls.get(""s_time"", 0)
+        is_cdn = urls.get(""is_cdn"", False)
+        is_test_cdn = urls.get(""is_test_cdn"", False)
+        error_data = {""code"": 99999, ""message"": u""重试次数达到上限""}
+        if data:
+            method = ""post""
+            self.setHeaders({""Content-Length"": ""{0}"".format(len(data))})
+        else:
+            method = ""get""
+            self.resetHeaders()
+        if TickerConfig.RANDOM_AGENT is 1:
+            self.setHeadersUserAgent()
+        self.setHeadersReferer(urls[""Referer""])
+        if is_logger:
+            logger.log(
+                u""url: {0}\n入参: {1}\n请求方式: {2}\n"".format(req_url, data, method))
+        self.setHeadersHost(urls[""Host""])
+        if is_test_cdn:
+            url_host = self._cdn
+        elif is_cdn:
+            if self._cdn:
+                # print(u""当前请求cdn为{}"".format(self._cdn))
+                url_host = self._cdn
+            else:
+                url_host = urls[""Host""]
+        else:
+            url_host = urls[""Host""]
+        http = urls.get(""httpType"") or ""https""
+        for i in range(re_try):
+            try:
+                # sleep(urls[""s_time""]) if ""s_time"" in urls else sleep(0.001)
+                sleep(s_time)
+                try:
+                    requests.packages.urllib3.disable_warnings()
+                except:
+                    pass
+                response = self._s.request(method=method,
+                                           timeout=5,
+                                           proxies=self._proxies,
+                                           url=http + ""://"" + url_host + req_url,
+                                           data=data,
+                                           allow_redirects=allow_redirects,
+                                           verify=False,
+                                           **kwargs)
+                if response.status_code == 200 or response.status_code == 302:
+                    if urls.get(""not_decode"", False):
+                        return response.content
+                    if response.content:
+                        if is_logger:
+                            logger.log(
+                                u""出参：{0}"".format(response.content.decode()))
+                        if urls[""is_json""]:
+                            return json.loads(
+                                response.content.decode() if isinstance(response.content, bytes) else response.content)
+                        else:
+                            return response.content.decode(""utf8"", ""ignore"") if isinstance(response.content,
+                                                                                           bytes) else response.content
+                    else:
+                        print(f""url: {urls['req_url']}返回参数为空, 接口状态码: {response.status_code}"")
+
+                        logger.log(
+                            u""url: {} 返回参数为空"".format(urls[""req_url""]))
+                        if self.cdnList:
+                            # 如果下单或者登陆出现cdn 302的情况，立马切换cdn
+                            url_host = self.cdnList.pop(random.randint(0, 4))
+                        continue
+                else:
+                    sleep(urls[""re_time""])
+            except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError):
+                pass
+            except socket.error:
+                pass
+        return error_data",126,204,
+default_get_data,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/MySocketUtils.py,"get请求默认组装字符串
+需要拼接的字符串
+-- url 发送请求的全连接
+:return:
+    ","def default_get_data():
+    """"""
+    get请求默认组装字符串
+    需要拼接的字符串
+    -- url 发送请求的全连接
+    :return:
+        """"""
+    return 'GET {0} HTTP/1.1\r\nConnection: close\r\n' \
+           'Host: kyfw.12306.cn\r\n' \
+           ""Referer: {1}\r\n"" \
+           'User-Agent: Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.125 Safari/537.36' \
+           '\r\nAccept: */*\r\n' \
+           ""Cookie: {2}\r\n\n""\
+           '\r\n'",30,43,
+default_post_data,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/MySocketUtils.py,"post请求默认组装字符串
+需要拼接的字符串
+-- url 发送请求的全连接
+-- Referer 请求页面来源
+-- Content-Length: body 长度
+-- Cookie 页面请求的身份认证
+-- appid 接口请求报文
+:return:","def default_post_data():
+    """"""
+    post请求默认组装字符串
+    需要拼接的字符串
+    -- url 发送请求的全连接
+    -- Referer 请求页面来源
+    -- Content-Length: body 长度
+    -- Cookie 页面请求的身份认证
+    -- appid 接口请求报文
+    :return:
+    """"""
+    return ""POST https://kyfw.12306.cn{0} HTTP/1.1\r\n"" \
+           ""Host: kyfw.12306.cn\r\n"" \
+           ""Connection: close\r\n""\
+           ""Origin: https://kyfw.12306.cn\r\n"" \
+           ""X-Requested-With: XMLHttpRequest\r\n"" \
+           ""Referer: {3}\r\n"" \
+           ""Accept-Language: zh-CN,zh;q=0.9,en;q=0.8\r\n"" \
+           ""Content-Type: application/x-www-form-urlencoded; charset=UTF-8\r\n"" \
+           ""Accept: application/json, text/javascript, */*; q=0.01\r\n"" \
+           ""User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/604.3.5 (KHTML, like Gecko) Version/11.0.1 Safari/604.3.5\r\n"" \
+           ""Content-Length: {2}\r\n""\
+           ""Cookie: {4}\r\n\n""\
+           ""{1}\r\n""",51,74,
+connect_socket,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/MySocketUtils.py,"连接socket
+:param host:
+:param port:
+:return:","def connect_socket(self, host, port):
+        """"""
+        连接socket
+        :param host:
+        :param port:
+        :return:
+        """"""
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host if isinstance(host, str) else str(host),
+                   port if isinstance(port, int) else int(port)))
+        return s",84,94,
+get_cookie,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/MySocketUtils.py,"提取cookie
+:param recv_data:
+:return:","def get_cookie(recv_data):
+        """"""
+        提取cookie
+        :param recv_data:
+        :return:
+        """"""
+        if not isinstance(recv_data, str):
+            recv_data = str(recv_data)
+        cookies_re = re.compile(r""Set-Cookie: (\S+);"")
+        cookies = re.findall(cookies_re, recv_data)
+        return ""; "".join(cookies)",146,156,
+get_status_code,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/MySocketUtils.py,"获取状态码
+:return:","def get_status_code(recv_data):
+        """"""
+        获取状态码
+        :return:
+        """"""
+        if not isinstance(recv_data, str):
+            recv_data = str(recv_data)
+        http_code_re = re.compile(r""HTTP/1.1 (\S+) "")
+        status_code = re.search(http_code_re, recv_data).group(1)
+        return status_code",159,168,
+get_rep_body,/Users/bytedance/test_repo/BytedanceQA/12306/myUrllib/MySocketUtils.py,"获取返回值
+:param recv_data:
+:return:","def get_rep_body(recv_data):
+        """"""
+        获取返回值
+        :param recv_data:
+        :return:
+        """"""
+        if not isinstance(recv_data, str):
+            recv_data = str(recv_data)
+        if recv_data.find(""{"") != -1 and recv_data.find(""}"") != -1:
+            data = json.loads(recv_data.split(""\n"")[-1])
+            return data
+        else:
+            print(recv_data)",171,183,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/CheckOrderInfo.py,"参数结构
+:return:","def data_par(self):
+        """"""
+        参数结构
+        :return:
+        """"""
+        data = OrderedDict()
+        data['bed_level_order_num'] = ""000000000000000000000000000000""
+        data['passengerTicketStr'] = self.passengerTicketStrList.rstrip(""_{0}"".format(self.set_type))
+        data['oldPassengerStr'] = self.oldPassengerStr
+        data['tour_flag'] = 'dc'
+        data['randCode'] = """"
+        data['cancel_flag'] = 2
+        data['_json_att'] = """"
+        data['REPEAT_SUBMIT_TOKEN'] = self.token
+        return data",22,36,
+sendCheckOrderInfo,/Users/bytedance/test_repo/BytedanceQA/12306/inter/CheckOrderInfo.py,"检查支付订单，需要提交REPEAT_SUBMIT_TOKEN
+passengerTicketStr : 座位编号,0,票类型,乘客名,证件类型,证件号,手机号码,保存常用联系人(Y或N)
+oldPassengersStr: 乘客名,证件类型,证件号,乘客类型
+:return:","def sendCheckOrderInfo(self):
+        """"""
+        检查支付订单，需要提交REPEAT_SUBMIT_TOKEN
+        passengerTicketStr : 座位编号,0,票类型,乘客名,证件类型,证件号,手机号码,保存常用联系人(Y或N)
+        oldPassengersStr: 乘客名,证件类型,证件号,乘客类型
+        :return:
+        """"""
+        CheckOrderInfoUrls = self.session.urls[""checkOrderInfoUrl""]
+        data = self.data_par()
+        checkOrderInfoRep = self.session.httpClint.send(CheckOrderInfoUrls, data)
+        data = checkOrderInfoRep.get(""data"", {})
+        if data and data.get(""submitStatus"", False):
+            print (u'车票提交通过，正在尝试排队')
+            ifShowPassCodeTime = int(checkOrderInfoRep[""data""][""ifShowPassCodeTime""]) / float(1000)
+            if ""ifShowPassCode"" in checkOrderInfoRep[""data""] and checkOrderInfoRep[""data""][""ifShowPassCode""] == ""Y"":
+                is_need_code = True
+            elif ""ifShowPassCode"" in checkOrderInfoRep[""data""] and checkOrderInfoRep['data']['submitStatus'] is True:
+                is_need_code = False
+            else:
+                is_need_code = False
+            QueueCount = getQueueCount(self.session,
+                                       is_need_code,
+                                       ifShowPassCodeTime,
+                                       self.set_type,
+                                       self.station_dates,
+                                       self.train_no,
+                                       self.ticket_peoples,
+                                       self.ticketInfoForPassengerForm,
+                                       self.token,
+                                       self.oldPassengerStr,
+                                       self.passengerTicketStrList,
+                                       )
+            QueueCount.sendGetQueueCount()
+        elif ""errMsg"" in data and data[""errMsg""]:
+            print(checkOrderInfoRep['data'][""errMsg""])
+        elif 'messages' in checkOrderInfoRep and checkOrderInfoRep['messages']:
+            print (checkOrderInfoRep['messages'][0])",38,74,
+station_seat,/Users/bytedance/test_repo/BytedanceQA/12306/inter/Query.py,"获取车票对应坐席
+:return:","def station_seat(self, index):
+        """"""
+        获取车票对应坐席
+        :return:
+        """"""
+        seat = {'商务座': 32,
+                '一等座': 31,
+                '二等座': 30,
+                '特等座': 25,
+                '软卧': 23,
+                '硬卧': 28,
+                '硬座': 29,
+                '无座': 26,
+                '动卧': 33,
+                }
+        return seat[index]",33,48,
+check_is_need_train,/Users/bytedance/test_repo/BytedanceQA/12306/inter/Query.py,"判断车次是否为想要的车次，如果ticket_info为空，那么就不校验车次，直接返回True
+:param ticket_info:
+:return:","def check_is_need_train(self, ticket_info):
+        """"""
+        判断车次是否为想要的车次，如果ticket_info为空，那么就不校验车次，直接返回True
+        :param ticket_info:
+        :return:
+        """"""
+        if self.station_dates and self.station_trains:
+            return ticket_info[3] in self.station_trains
+        else:
+            return True",50,59,
+sendCheckUser,/Users/bytedance/test_repo/BytedanceQA/12306/inter/CheckUser.py,"检查用户登录, 检查间隔为2分钟
+:return:","def sendCheckUser(self):
+        """"""
+        检查用户登录, 检查间隔为2分钟
+        :return:
+        """"""
+        CHENK_TIME = 1
+        while 1:
+            time.sleep(3)  # 防止cpu占用过高
+            configCommon.checkSleepTime(self.session)  # 修复晚上查询线程休眠时，检查登录线程为休眠，造成快豆迅速消耗
+            if wrapcache.get(""user_time"") is None:
+                check_user_url = self.session.urls[""check_user_url""]
+                data = {""_json_att"": """"}
+                check_user = self.session.httpClint.send(check_user_url, data)
+                if check_user.get(""data"", False):
+                    check_user_flag = check_user[""data""][""flag""]
+                    if check_user_flag is True:
+                       wrapcache.set(""user_time"", datetime.datetime.now(), timeout=random.randint(60, 80) * CHENK_TIME)
+                    else:
+                        if check_user['messages']:
+                            print(ticket.LOGIN_SESSION_FAIL.format(check_user['messages']))
+                            self.session.call_login()
+                            wrapcache.set(""user_time"", datetime.datetime.now(), timeout=random.randint(60, 80) * CHENK_TIME)
+                        else:
+                            print(ticket.LOGIN_SESSION_FAIL.format(check_user['messages']))
+                            self.session.call_login()
+                            wrapcache.set(""user_time"", datetime.datetime.now(), timeout=random.randint(60, 80) * CHENK_TIME)",14,39,
+loginConf,/Users/bytedance/test_repo/BytedanceQA/12306/inter/LoginConf.py,"判断登录是否需要验证码
+:param session:
+:return:","def loginConf(session):
+    """"""
+    判断登录是否需要验证码
+    :param session:
+    :return:
+    """"""
+    loginConfUrl = urls.get(""loginConf"")
+    loginConfRsp = session.httpClint.send(urls=loginConfUrl, data={})
+    if loginConfRsp and loginConfRsp.get(""data"", {}).get(""is_login_passCode"") == ""N"":
+        print(u""不需要验证码"")
+        return False
+    else:
+        print(u""需要验证码"")
+        return True",5,18,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ConfirmSingleForQueueAsys.py,"字段说明
+    passengerTicketStr 乘客乘车代码
+    oldPassengerStr 乘客编号代码
+    randCode 填空
+    purpose_codes 学生还是成人
+    key_check_isChange autoSubmitOrderRequest返回的result字段做切割即可
+    leftTicketStr autoSubmitOrderRequest返回的result字段做切割即可
+    train_location autoSubmitOrderRequest返回的result字段做切割即可
+    choose_seats
+    seatDetailType
+    _json_att
+:return:","def data_par(self):
+        """"""
+        字段说明
+            passengerTicketStr 乘客乘车代码
+            oldPassengerStr 乘客编号代码
+            randCode 填空
+            purpose_codes 学生还是成人
+            key_check_isChange autoSubmitOrderRequest返回的result字段做切割即可
+            leftTicketStr autoSubmitOrderRequest返回的result字段做切割即可
+            train_location autoSubmitOrderRequest返回的result字段做切割即可
+            choose_seats
+            seatDetailType
+            _json_att
+        :return:
+        """"""
+        results = self.result.split(""#"")
+        key_check_isChange = results[1]
+        leftTicketStr = results[2]
+        train_location = results[0]
+        data = OrderedDict()
+        data[""passengerTicketStr""] = self.passengerTicketStr
+        data[""oldPassengerStr""] = self.oldPassengerStr
+        data[""randCode""] = self.randCode
+        data[""purpose_codes""] = ""ADULT""
+        data[""key_check_isChange""] = key_check_isChange
+        data[""leftTicketStr""] = leftTicketStr
+        data[""train_location""] = train_location
+        data[""choose_seats""] = """"
+        data[""seatDetailType""] = """"
+        data[""_json_att""] = """"
+        return data",26,56,
+sendConfirmSingleForQueueAsys,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ConfirmSingleForQueueAsys.py,"请求订单快读排队接口
+:return:","def sendConfirmSingleForQueueAsys(self):
+        """"""
+        请求订单快读排队接口
+        :return:
+        """"""
+        urls = self.session.urls[""confirmSingleForQueueAsys""]
+        data = self.data_par()
+        confirmSingleForQueueAsysResult = self.session.httpClint.send(urls, data)
+        if confirmSingleForQueueAsysResult.get(""status"", False) and confirmSingleForQueueAsysResult.get(""data"", False):
+            queueData = confirmSingleForQueueAsysResult.get(""data"", {})
+            if queueData.get(""submitStatus"", False):
+                qwt = queryOrderWaitTime(session=self.session)
+                qwt.sendQueryOrderWaitTime()
+            else:
+                print(queueData.get(""errMsg"", """"))",58,72,
+reqLiftTicketInit,/Users/bytedance/test_repo/BytedanceQA/12306/inter/LiftTicketInit.py,"请求抢票页面
+:return:","def reqLiftTicketInit(self):
+        """"""
+        请求抢票页面
+        :return:
+        """"""
+        urls = self.session.urls[""left_ticket_init""]
+        # 获取初始化的结果
+        result = self.session.httpClint.send(urls)
+        # 用正则表达式查出CLeftTicketUrl的值
+        matchObj = re.search('var CLeftTicketUrl = \'(.*)\'', result, re.M|re.I);
+        if matchObj:
+            # 如果有值，替换queryUrl
+            self.session.queryUrl = matchObj.group(1)
+        return {
+            ""status"": True
+        }",9,24,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/PassengerInitApi.py,获取候补信息,"def __init__(self, session, secretList, tickerNo):
+        """"""
+        获取候补信息
+        """"""
+        self.secretList = secretList
+        self.tickerNo = tickerNo
+        self.session = session",9,15,
+time,/Users/bytedance/test_repo/BytedanceQA/12306/inter/SubmitOrderRequest.py,"获取日期
+:return:","def time():
+    """"""
+    获取日期
+    :return:
+    """"""
+    today = datetime.date.today()
+    return today.strftime('%Y-%m-%d')",13,19,
+data_apr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/SubmitOrderRequest.py,:return:,"def data_apr(self):
+        """"""
+        :return:
+        """"""
+        data = [('secretStr', self.secretStr),  # 字符串加密
+                ('train_date', self.train_date),  # 出发时间
+                ('back_train_date', time()),  # 返程时间
+                ('tour_flag', 'dc'),  # 旅途类型
+                ('purpose_codes', 'ADULT'),  # 成人票还是学生票
+                ('query_from_station_name', TickerConfig.FROM_STATION),  # 起始车站
+                ('query_to_station_name', TickerConfig.TO_STATION),  # 终点车站
+                ('undefined', ''),
+                ]
+        return data",41,54,
+sendSubmitOrderRequest,/Users/bytedance/test_repo/BytedanceQA/12306/inter/SubmitOrderRequest.py,"提交车次
+预定的请求参数，注意参数顺序
+注意这里为了防止secretStr被urllib.parse过度编码，在这里进行一次解码
+否则调用HttpTester类的post方法将会将secretStr编码成为无效码,造成提交预定请求失败
+:param secretStr: 提交车次加密
+:return:","def sendSubmitOrderRequest(self):
+        """"""
+        提交车次
+        预定的请求参数，注意参数顺序
+        注意这里为了防止secretStr被urllib.parse过度编码，在这里进行一次解码
+        否则调用HttpTester类的post方法将会将secretStr编码成为无效码,造成提交预定请求失败
+        :param secretStr: 提交车次加密
+        :return:
+        """"""
+        submit_station_url = self.session.urls[""submit_station_url""]
+        submitResult = self.session.httpClint.send(submit_station_url, self.data_apr())
+        if 'data' in submitResult and submitResult['data']:
+            if submitResult['data'] == 'N':
+                coi = checkOrderInfo(self.session, self.train_no, self.set_type, self.passengerTicketStrList,
+                                     self.oldPassengerStr,
+                                     self.train_date, self.ticke_peoples)
+                coi.sendCheckOrderInfo()
+            else:
+                print (u'出票失败')
+        elif 'messages' in submitResult and submitResult['messages']:
+            raise ticketIsExitsException(submitResult['messages'][0])",56,76,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/SubmitOrderRequest.py,"提交候补订单
+:param secretList:
+:param session:","def __init__(self, session, secretList, tickerNo):
+        """"""
+        提交候补订单
+        :param secretList:
+        :param session:
+        """"""
+        self.secretList = secretList
+        self.session = session
+        self.tickerNo = tickerNo",80,88,
+data_apr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/SubmitOrderRequest.py,"secretList      9vqa9%2B%2F%2Fsdozmm22hpSeDTGqRUwSuA2D0r%2BmU%2BLZj7MK7CDuf5Ep1xpxl4Dyxfmoah%2BaB9TZSesU%0AkxBbo5oNgR1vqMfvq66VP0T7tpQtH%2BbVGBz1FolZG8jDD%2FHqnz%2FnvdBP416Og6WGS14O%2F3iBSwT8%0AkRPsNF0Vq0U082g0tlJtP%2BPn7TzW3z7TDCceMJIjFcfEOA%2BW%2BuK%2Bpy6jCQMv0TmlkXf5aKcGnE02%0APuv4I8nF%2BOWjWzv9CrJyiCZiWaXd%2Bi7p69V3a9dhF787UgS660%2BqKRFB4RLwAfic3MkAlfpGWhMY%0ACfARVQ%3D%3D#O|
+_json_att
+候补一次只能补一个座位，默认取TICKET_TYPE第一个
+:return:","def data_apr(self):
+        """"""
+        secretList	9vqa9%2B%2F%2Fsdozmm22hpSeDTGqRUwSuA2D0r%2BmU%2BLZj7MK7CDuf5Ep1xpxl4Dyxfmoah%2BaB9TZSesU%0AkxBbo5oNgR1vqMfvq66VP0T7tpQtH%2BbVGBz1FolZG8jDD%2FHqnz%2FnvdBP416Og6WGS14O%2F3iBSwT8%0AkRPsNF0Vq0U082g0tlJtP%2BPn7TzW3z7TDCceMJIjFcfEOA%2BW%2BuK%2Bpy6jCQMv0TmlkXf5aKcGnE02%0APuv4I8nF%2BOWjWzv9CrJyiCZiWaXd%2Bi7p69V3a9dhF787UgS660%2BqKRFB4RLwAfic3MkAlfpGWhMY%0ACfARVQ%3D%3D#O|
+        _json_att
+        候补一次只能补一个座位，默认取TICKET_TYPE第一个
+        :return:
+        """"""
+
+        ticker = TickerConfig.PASSENGER_TICKER_STR.get(TickerConfig.SET_TYPE[0])
+        data = OrderedDict()
+        data[""secretList""] = f""{self.secretList}#{ticker}|""
+        data[""_json_att""] = """"
+        return data",90,102,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ChechFace.py,人脸识别,"def __init__(self, selectObj, secretList, train_no):
+        """"""
+        人脸识别
+        """"""
+        self.secretList = secretList
+        self.session = selectObj
+        self.train_no = train_no",12,18,
+data_apr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ChechFace.py,"secretList      9vqa9%2B%2F%2Fsdozmm22hpSeDTGqRUwSuA2D0r%2BmU%2BLZj7MK7CDuf5Ep1xpxl4Dyxfmoah%2BaB9TZSesU%0AkxBbo5oNgR1vqMfvq66VP0T7tpQtH%2BbVGBz1FolZG8jDD%2FHqnz%2FnvdBP416Og6WGS14O%2F3iBSwT8%0AkRPsNF0Vq0U082g0tlJtP%2BPn7TzW3z7TDCceMJIjFcfEOA%2BW%2BuK%2Bpy6jCQMv0TmlkXf5aKcGnE02%0APuv4I8nF%2BOWjWzv9CrJyiCZiWaXd%2Bi7p69V3a9dhF787UgS660%2BqKRFB4RLwAfic3MkAlfpGWhMY%0ACfARVQ%3D%3D#O|
+_json_att
+候补一次只能补一个座位，默认取TICKET_TYPE第一个
+:return:","def data_apr(self):
+        """"""
+        secretList	9vqa9%2B%2F%2Fsdozmm22hpSeDTGqRUwSuA2D0r%2BmU%2BLZj7MK7CDuf5Ep1xpxl4Dyxfmoah%2BaB9TZSesU%0AkxBbo5oNgR1vqMfvq66VP0T7tpQtH%2BbVGBz1FolZG8jDD%2FHqnz%2FnvdBP416Og6WGS14O%2F3iBSwT8%0AkRPsNF0Vq0U082g0tlJtP%2BPn7TzW3z7TDCceMJIjFcfEOA%2BW%2BuK%2Bpy6jCQMv0TmlkXf5aKcGnE02%0APuv4I8nF%2BOWjWzv9CrJyiCZiWaXd%2Bi7p69V3a9dhF787UgS660%2BqKRFB4RLwAfic3MkAlfpGWhMY%0ACfARVQ%3D%3D#O|
+        _json_att
+        候补一次只能补一个座位，默认取TICKET_TYPE第一个
+        :return:
+        """"""
+        ticker = TickerConfig.PASSENGER_TICKER_STR.get(TickerConfig.SET_TYPE[0])
+        data = OrderedDict()
+        data[""secretList""] = f""{self.secretList}#{ticker}|""
+        data[""_json_att""] = """"
+        return data",20,31,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ConfirmSingleForQueue.py,"模拟提交订单是确认按钮，参数获取方法还是get_ticketInfoForPassengerForm 中获取
+:return:","def data_par(self):
+        """"""
+        模拟提交订单是确认按钮，参数获取方法还是get_ticketInfoForPassengerForm 中获取
+        :return:
+        """"""
+        if not self.passengerTicketStrList and not self.oldPassengerStr:
+            s = getPassengerDTOs(session=self.session, ticket_peoples=self.ticket_peoples, set_type=self.set_type)
+            getPassengerDTOsResult = s.getPassengerTicketStrListAndOldPassengerStr()
+            if getPassengerDTOsResult.get(""status"", False):
+                self.passengerTicketStrList = getPassengerDTOsResult.get(""passengerTicketStrList"", """")
+                self.oldPassengerStr = getPassengerDTOsResult.get(""oldPassengerStr"", """")
+        data = {
+            ""passengerTicketStr"": self.passengerTicketStrList.rstrip(""_{0}"".format(self.set_type)),
+            ""oldPassengerStr"": """".join(self.oldPassengerStr),
+            ""purpose_codes"": self.ticketInfoForPassengerForm[""purpose_codes""],
+            ""key_check_isChange"": self.ticketInfoForPassengerForm[""key_check_isChange""],
+            ""leftTicketStr"": self.ticketInfoForPassengerForm[""leftTicketStr""],
+            ""train_location"": self.ticketInfoForPassengerForm[""train_location""],
+            ""seatDetailType"": """",  # 开始需要选择座位，但是目前12306不支持自动选择作为，那这个参数为默认
+            ""roomType"": ""00"",  # 好像是根据一个id来判断选中的，两种 第一种是00，第二种是10，但是我在12306的页面没找到该id，目前写死是00，不知道会出什么错
+            ""dwAll"": ""N"",
+            ""whatsSelect"": 1,
+            ""_json_at"": """",
+            ""randCode"": """",
+            ""choose_seats"": """",
+            ""REPEAT_SUBMIT_TOKEN"": self.token,
+        }
+        return data",24,51,
+sendConfirmSingleForQueue,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ConfirmSingleForQueue.py,"# 模拟查询当前的列车排队人数的方法
+# 返回信息组成的提示字符串
+:return:","def sendConfirmSingleForQueue(self):
+        """"""
+        # 模拟查询当前的列车排队人数的方法
+        # 返回信息组成的提示字符串
+        :return:
+        """"""
+        data = self.data_par()
+        checkQueueOrderUrl = self.session.urls[""checkQueueOrderUrl""]
+        try:
+            if self.is_node_code:
+                print(u""正在使用自动识别验证码功能"")
+                for i in range(3):
+                    randCode = getRandCode(is_auto_code=True, auto_code_type=2)
+                    checkcode = checkRandCodeAnsyn(self.session, randCode, self.token)
+                    if checkcode == 'TRUE':
+                        print(u""验证码通过,正在提交订单"")
+                        data['randCode'] = randCode
+                        break
+                    else:
+                        print (u""验证码有误, {0}次尝试重试"".format(i + 1))
+                print(u""验证码超过限定次数3次，放弃此次订票机会!"")
+            else:
+                print(u""不需要验证码"")
+            time.sleep(self.ifShowPassCodeTime)
+            checkQueueOrderResult = self.session.httpClint.send(checkQueueOrderUrl, data)
+            if ""status"" in checkQueueOrderResult and checkQueueOrderResult[""status""]:
+                c_data = checkQueueOrderResult[""data""] if ""data"" in checkQueueOrderResult else {}
+                if 'submitStatus' in c_data and c_data['submitStatus'] is True:
+                    qow = queryOrderWaitTime(self.session)
+                    qow.sendQueryOrderWaitTime()
+                else:
+                    if 'errMsg' in c_data and c_data['errMsg']:
+                        print(u""提交订单失败，{0}"".format(c_data['errMsg']))
+                    else:
+                        print(c_data)
+                        print(u'订票失败!很抱歉,请重试提交预订功能!')
+            elif ""messages"" in checkQueueOrderResult and checkQueueOrderResult[""messages""]:
+                print(u""提交订单失败,错误信息: "" + checkQueueOrderResult[""messages""])
+            else:
+                print(u""提交订单中，请耐心等待："" + checkQueueOrderResult[""message""])
+        except ValueError:
+            print(u""接口 {} 无响应"".format(checkQueueOrderUrl))",53,94,
+sendQueryOrderWaitTime,/Users/bytedance/test_repo/BytedanceQA/12306/inter/QueryOrderWaitTime.py,"排队获取订单等待信息,每隔3秒请求一次，最高请求次数为20次！
+:return:","def sendQueryOrderWaitTime(self):
+        """"""
+        排队获取订单等待信息,每隔3秒请求一次，最高请求次数为20次！
+        :return:
+        """"""
+        num = 1
+        while True:
+            num += 1
+            if num > ticket.OUT_NUM:
+                print(ticket.WAIT_OUT_NUM)
+                order_id = self.queryMyOrderNoComplete()  # 排队失败，自动取消排队订单
+                if order_id:
+                    self.cancelNoCompleteMyOrder(order_id)
+                break
+            try:
+                queryOrderWaitTimeUrl = copy.deepcopy(self.session.urls[""queryOrderWaitTimeUrl""])
+                queryOrderWaitTimeUrl[""req_url""] = queryOrderWaitTimeUrl[""req_url""].format(int(round(time.time() * 1000)))
+                queryOrderWaitTimeResult = self.session.httpClint.send(queryOrderWaitTimeUrl)
+            except ValueError:
+                queryOrderWaitTimeResult = {}
+            if queryOrderWaitTimeResult:
+                if queryOrderWaitTimeResult.get(""status"", False):
+                    data = queryOrderWaitTimeResult.get(""data"", False)
+                    if data and data.get(""orderId"", """"):
+                        sendEmail(ticket.WAIT_ORDER_SUCCESS.format(
+                            data.get(""orderId"", """")))
+                        sendServerChan(ticket.WAIT_ORDER_SUCCESS.format(
+                            data.get(""orderId"", """")))
+                        raise ticketIsExitsException(ticket.WAIT_ORDER_SUCCESS.format(
+                            data.get(""orderId"")))
+                    elif data.get(""msg"", False):
+                        print(data.get(""msg"", """"))
+                        break
+                    elif data.get(""waitTime"", False):
+                        print(ticket.WAIT_ORDER_CONTINUE.format(0 - data.get(""waitTime"", False)))
+                    else:
+                        pass
+                elif queryOrderWaitTimeResult.get(""messages"", False):
+                    print(ticket.WAIT_ORDER_FAIL.format(queryOrderWaitTimeResult.get(""messages"", """")))
+                else:
+                    print(ticket.WAIT_ORDER_NUM.format(num + 1))
+            else:
+                pass
+            time.sleep(2)
+        else:
+            print(ticketNumOutException(ticket.WAIT_ORDER_SUB_FAIL))",20,65,
+queryMyOrderNoComplete,/Users/bytedance/test_repo/BytedanceQA/12306/inter/QueryOrderWaitTime.py,"获取订单列表信息
+:return:","def queryMyOrderNoComplete(self):
+        """"""
+        获取订单列表信息
+        :return:
+        """"""
+        self.initNoComplete()
+        queryMyOrderNoCompleteUrl = self.session.urls[""queryMyOrderNoCompleteUrl""]
+        data = {""_json_att"": """"}
+        try:
+            queryMyOrderNoCompleteResult = self.session.httpClint.send(queryMyOrderNoCompleteUrl, data)
+        except ValueError:
+            queryMyOrderNoCompleteResult = {}
+        if queryMyOrderNoCompleteResult:
+            if queryMyOrderNoCompleteResult.get(""data"", False) and queryMyOrderNoCompleteResult[""data""].get(""orderDBList"", False):
+                return queryMyOrderNoCompleteResult[""data""]
+            elif queryMyOrderNoCompleteResult.get(""data"", False) and queryMyOrderNoCompleteResult[""data""].get(""orderCacheDTO"", False):
+                if queryMyOrderNoCompleteResult[""data""][""orderCacheDTO""].get(""message"", False):
+                    print(queryMyOrderNoCompleteResult[""data""][""orderCacheDTO""][""message""][""message""])
+                    raise ticketNumOutException(
+                        queryMyOrderNoCompleteResult[""data""][""orderCacheDTO""][""message""][""message""])
+            else:
+                if queryMyOrderNoCompleteResult.get(""message"", False):
+                    print(queryMyOrderNoCompleteResult.get(""message"", False))
+                    return False
+                else:
+                    return False
+        else:
+            return False",67,94,
+initNoComplete,/Users/bytedance/test_repo/BytedanceQA/12306/inter/QueryOrderWaitTime.py,"获取订单前需要进入订单列表页，获取订单列表页session
+:return:","def initNoComplete(self):
+        """"""
+        获取订单前需要进入订单列表页，获取订单列表页session
+        :return:
+        """"""
+        initNoCompleteUrl = self.session.urls[""initNoCompleteUrl""]
+        data = {""_json_att"": """"}
+        self.session.httpClint.send(initNoCompleteUrl, data)",96,103,
+cancelNoCompleteMyOrder,/Users/bytedance/test_repo/BytedanceQA/12306/inter/QueryOrderWaitTime.py,"取消订单
+:param sequence_no: 订单编号
+:return:","def cancelNoCompleteMyOrder(self, sequence_no):
+        """"""
+        取消订单
+        :param sequence_no: 订单编号
+        :return:
+        """"""
+        cancelNoCompleteMyOrderUrl = self.session.urls[""cancelNoCompleteMyOrder""]
+        cancelNoCompleteMyOrderData = {
+            ""sequence_no"": sequence_no,
+            ""cancel_flag"": ""cancel_order"",
+            ""_json_att"": """"
+        }
+        cancelNoCompleteMyOrderResult = self.session.httpClint.send(cancelNoCompleteMyOrderUrl,
+                                                                    cancelNoCompleteMyOrderData)
+        if cancelNoCompleteMyOrderResult.get(""data"", False) and cancelNoCompleteMyOrderResult[""data""].get(""existError"", ""N""):
+            print(ticket.CANCEL_ORDER_SUCCESS.format(sequence_no))
+            time.sleep(2)
+            return True
+        else:
+            print(ticket.CANCEL_ORDER_FAIL.format(sequence_no))
+            return False",105,125,
+sendGetRepeatSubmitToken,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetRepeatSubmitToken.py,"获取提交车票请求token
+:return: token","def sendGetRepeatSubmitToken(self):
+        """"""
+        获取提交车票请求token
+        :return: token
+        """"""
+        initdc_url = self.session.urls[""initdc_url""]
+        initdc_result = self.session.httpClint.send(initdc_url, )
+        token_name = re.compile(r""var globalRepeatSubmitToken = '(\S+)'"")
+        ticketInfoForPassengerForm_name = re.compile(r'var ticketInfoForPassengerForm=(\{.+\})?')
+        order_request_params_name = re.compile(r'var orderRequestDTO=(\{.+\})?')
+        token = re.search(token_name, initdc_result).group(1)
+        re_tfpf = re.findall(ticketInfoForPassengerForm_name, initdc_result)
+        re_orp = re.findall(order_request_params_name, initdc_result)
+        if re_tfpf:
+            ticketInfoForPassengerForm = json.loads(re_tfpf[0].replace(""'"", '""'))
+        else:
+            ticketInfoForPassengerForm = """"
+        if re_orp:
+            order_request_params = json.loads(re_orp[0].replace(""'"", '""'))
+        else:
+            order_request_params = """"
+        return {
+            ""token"": token,
+            ""ticketInfoForPassengerForm"": ticketInfoForPassengerForm,
+            ""order_request_params"": order_request_params,
+            ""session"": self.session
+        }",10,36,
+getPassCodeNewOrderAndLogin,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetPassCodeNewOrderAndLogin.py,"下载验证码
+:param session:
+:param imgType: 下载验证码类型，login=登录验证码，其余为订单验证码
+:return:","def getPassCodeNewOrderAndLogin(session, imgType):
+    """"""
+    下载验证码
+    :param session:
+    :param imgType: 下载验证码类型，login=登录验证码，其余为订单验证码
+    :return:
+    """"""
+    if imgType == ""login"":
+        codeImgUrl = copy.deepcopy(session.urls[""getCodeImg""])
+        codeImgUrl[""req_url""] = codeImgUrl[""req_url""].format(random.random())
+    else:
+        codeImgUrl = copy.deepcopy(session.urls[""codeImgByOrder""])
+        codeImgUrl[""req_url""] = codeImgUrl[""req_url""].format(random.random())
+    print(u""下载验证码..."")
+    img_path = './tkcode.png'
+    result = session.httpClint.send(codeImgUrl)
+    try:
+        if isinstance(result, dict):
+            print(u""下载验证码失败, 请手动检查是否ip被封，或者重试，请求地址：https://kyfw.12306.cn{}"".format(codeImgUrl.get(""req_url"")))
+            return False
+        else:
+            print(u""下载验证码成功"")
+            try:
+                with open(img_path, 'wb', encoding=""utf-8"") as img:
+                    img.write(result)
+            except Exception:
+                with open(img_path, 'wb') as img:
+                    img.write(result)
+            return result
+    except OSError:
+        print(u""验证码下载失败，可能ip被封，确认请手动请求: {0}"".format(codeImgUrl))",7,37,
+getPassCodeNewOrderAndLogin1,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetPassCodeNewOrderAndLogin.py,"获取验证码2
+:param session:
+:param imgType:
+:return:","def getPassCodeNewOrderAndLogin1(session, imgType):
+    """"""
+    获取验证码2
+    :param session:
+    :param imgType:
+    :return:
+    """"""
+    if imgType == ""login"":
+        codeImgUrl = copy.deepcopy(session.urls[""getCodeImg1""])
+        codeImgUrl[""req_url""] = codeImgUrl[""req_url""].format(random.random())
+    else:
+        codeImgUrl = copy.deepcopy(session.urls[""codeImgByOrder""])
+        codeImgUrl[""req_url""] = codeImgUrl[""req_url""].format(random.random())
+    print(u""下载验证码..."")
+    img_path = './tkcode.png'
+    codeImgUrlRsp = session.httpClint.send(codeImgUrl)
+    if not isinstance(codeImgUrlRsp, str):
+        print(""验证码获取失败"")
+        return
+    result = eval(codeImgUrlRsp.split(""("")[1].split("")"")[0]).get(""image"")
+    try:
+        if isinstance(result, dict):
+            print(u""下载验证码失败, 请手动检查是否ip被封，或者重试，请求地址：https://kyfw.12306.cn{}"".format(codeImgUrl.get(""req_url"")))
+            return False
+        else:
+            print(u""下载验证码成功"")
+            try:
+                with open(img_path, 'wb', encoding=""utf-8"") as img:
+                    img.write(result)
+            except Exception:
+                with open(img_path, 'wb') as img:
+                    img.write(base64.b64decode(result))
+            return result
+    except OSError:
+        print(u""验证码下载失败，可能ip被封或者文件写入没权限"")",40,74,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetQueueCount.py,"参数结构
+自动提交代码接口-autoSubmitOrderRequest
+    - 字段说明
+        - secretStr 车票代码
+        - train_date 乘车日期
+        - tour_flag 乘车类型
+        - purpose_codes 学生还是成人
+        - query_from_station_name 起始车站
+        - query_to_station_name 结束车站
+        - cancel_flag 默认2，我也不知道干嘛的
+        - bed_level_order_num  000000000000000000000000000000
+        - passengerTicketStr   乘客乘车代码
+        - oldPassengerStr  乘客编号代码
+:return:","def data_par(self):
+        """"""
+        参数结构
+        自动提交代码接口-autoSubmitOrderRequest
+            - 字段说明
+                - secretStr 车票代码
+                - train_date 乘车日期
+                - tour_flag 乘车类型
+                - purpose_codes 学生还是成人
+                - query_from_station_name 起始车站
+                - query_to_station_name 结束车站
+                - cancel_flag 默认2，我也不知道干嘛的
+                - bed_level_order_num  000000000000000000000000000000
+                - passengerTicketStr   乘客乘车代码
+                - oldPassengerStr  乘客编号代码
+        :return:
+        """"""
+
+        if sys.version_info.major is 2:
+            new_train_date = filter(None, str(time.asctime(time.strptime(self.station_dates, ""%Y-%m-%d""))).split("" ""))
+        else:
+            new_train_date = list(filter(None, str(time.asctime(time.strptime(self.station_dates, ""%Y-%m-%d""))).split("" "")))
+        data = OrderedDict()
+        data['train_date'] = ""{0} {1} {2} {3} 00:00:00 GMT+0800 (中国标准时间)"".format(
+            new_train_date[0],
+            new_train_date[1],
+            new_train_date[2] if len(new_train_date[2]) is 2 else f""0{new_train_date[2]}"",
+            new_train_date[4],
+        ),
+        data['train_no'] = self.ticketInfoForPassengerForm['queryLeftTicketRequestDTO']['train_no'],
+        data['stationTrainCode'] = self.ticketInfoForPassengerForm['queryLeftTicketRequestDTO'][
+                                       'station_train_code'],
+        data['seatType'] = self.set_type,
+        data['fromStationTelecode'] = self.ticketInfoForPassengerForm['queryLeftTicketRequestDTO'][
+                                          'from_station'],
+        data['toStationTelecode'] = self.ticketInfoForPassengerForm['queryLeftTicketRequestDTO']['to_station'],
+        data['leftTicket'] = self.ticketInfoForPassengerForm['leftTicketStr'],
+        data['purpose_codes'] = self.ticketInfoForPassengerForm['purpose_codes'],
+        data['train_location'] = self.ticketInfoForPassengerForm['train_location'],
+        data['REPEAT_SUBMIT_TOKEN'] = self.token,
+        return data",37,77,
+sendGetQueueCount,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetQueueCount.py,"# 模拟查询当前的列车排队人数的方法
+# 返回信息组成的提示字符串
+:return:","def sendGetQueueCount(self):
+        """"""
+        # 模拟查询当前的列车排队人数的方法
+        # 返回信息组成的提示字符串
+        :return:
+        """"""
+        getQueueCountResult = self.session.httpClint.send(self.session.urls[""getQueueCountUrl""], self.data_par())
+        if ""status"" in getQueueCountResult and getQueueCountResult[""status""] is True:
+            if ""countT"" in getQueueCountResult[""data""]:
+                ticket = getQueueCountResult[""data""][""ticket""]
+                ticket_split = sum(map(conversion_int, ticket.split("",""))) if ticket.find("","") != -1 else ticket
+                countT = getQueueCountResult[""data""][""countT""]
+                if int(ticket_split) is 0:
+                    wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                                  timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+                    print(f""排队失败，当前余票数还剩: {ticket_split} 张"")
+                    return
+                print(u""排队成功, 你排在: {1}位, 当前余票还剩余: {0} 张"".format(ticket_split, countT))
+                csf = confirmSingleForQueue(self.session, self.ifShowPassCodeTime, self.is_need_code, self.token,
+                                            self.set_type, self.ticket_peoples, self.ticketInfoForPassengerForm,
+                                            self.oldPassengerStr, self.passengerTicketStrList)
+                csf.sendConfirmSingleForQueue()
+            #     else:
+            #         print(u""当前排队人数: {1} 当前余票还剩余:{0} 张，继续排队中"".format(ticket_split, countT))
+            else:
+                print(u""排队发现未知错误{0}，将此列车 {1}加入小黑屋"".format(getQueueCountResult, self.train_no))
+                wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                              timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+        elif ""messages"" in getQueueCountResult and getQueueCountResult[""messages""]:
+            print(u""排队异常，错误信息：{0}, 将此列车 {1}加入小黑屋"".format(getQueueCountResult[""messages""][0], self.train_no))
+            wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                          timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+        else:
+            if ""validateMessages"" in getQueueCountResult and getQueueCountResult[""validateMessages""]:
+                print(str(getQueueCountResult[""validateMessages""]))
+                wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                              timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+            else:
+                print(u""未知错误 {0}"".format("""".join(getQueueCountResult)))",79,117,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetQueueCount.py,"候补排队
+:param session:","def __init__(self, session):
+        """"""
+        候补排队
+        :param session:
+        """"""
+        self.session = session",121,126,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/AutoSubmitOrderRequest.py,"参数结构
+自动提交代码接口-autoSubmitOrderRequest
+    - 字段说明
+        - secretStr 车票代码
+        - train_date 乘车日期
+        - tour_flag 乘车类型
+        - purpose_codes 学生还是成人
+        - query_from_station_name 起始车站
+        - query_to_station_name 结束车站
+        - cancel_flag 默认2，我也不知道干嘛的
+        - bed_level_order_num  000000000000000000000000000000
+        - passengerTicketStr   乘客乘车代码
+        - oldPassengerStr  乘客编号代码
+:return:","def data_par(self):
+        """"""
+        参数结构
+        自动提交代码接口-autoSubmitOrderRequest
+            - 字段说明
+                - secretStr 车票代码
+                - train_date 乘车日期
+                - tour_flag 乘车类型
+                - purpose_codes 学生还是成人
+                - query_from_station_name 起始车站
+                - query_to_station_name 结束车站
+                - cancel_flag 默认2，我也不知道干嘛的
+                - bed_level_order_num  000000000000000000000000000000
+                - passengerTicketStr   乘客乘车代码
+                - oldPassengerStr  乘客编号代码
+        :return:
+        """"""
+        data = OrderedDict()
+        data[""secretStr""] = self.secretStr
+        data[""train_date""] = self.train_date
+        data[""tour_flag""] = ""dc""
+        data[""purpose_codes""] = ""ADULT""
+        data[""query_from_station_name""] = TickerConfig.FROM_STATION
+        data[""query_to_station_name""] = TickerConfig.TO_STATION
+        data[""cancel_flag""] = 2
+        data[""bed_level_order_num""] = ""000000000000000000000000000000""
+        data[""passengerTicketStr""] = self.passengerTicketStr
+        data[""oldPassengerStr""] = self.oldPassengerStr
+        return data",42,70,
+sendAutoSubmitOrderRequest,/Users/bytedance/test_repo/BytedanceQA/12306/inter/AutoSubmitOrderRequest.py,"请求下单接口
+:return:","def sendAutoSubmitOrderRequest(self):
+        """"""
+        请求下单接口
+        :return:
+        """"""
+        urls = self.session.urls[""autoSubmitOrderRequest""]
+        data = self.data_par()
+        autoSubmitOrderRequestResult = self.session.httpClint.send(urls, data)
+        if autoSubmitOrderRequestResult and \
+                autoSubmitOrderRequestResult.get(""status"", False) and\
+                autoSubmitOrderRequestResult.get(""httpstatus"", False) == 200:
+            requestResultData = autoSubmitOrderRequestResult.get(""data"", {})
+            if requestResultData:
+                result = requestResultData.get(""result"", """")
+                ifShowPassCode = requestResultData.get(""ifShowPassCode"", ""N"")
+                ifShowPassCodeTime = int(requestResultData.get(""ifShowPassCodeTime"", ""1000"")) / float(1000)
+                print(ticket.AUTO_SUBMIT_ORDER_REQUEST_C)
+                g = getQueueCountAsync(session=self.session,
+                                       train_no=self.train_no,
+                                       stationTrainCode=self.stationTrainCode,
+                                       fromStationTelecode=self.query_from_station_name,
+                                       toStationTelecode=self.query_to_station_name,
+                                       leftTicket=self.leftTicket,
+                                       set_type=self.set_type,
+                                       users=len(TickerConfig.TICKET_PEOPLES),
+                                       station_dates=self.train_date,
+                                       passengerTicketStr=self.passengerTicketStr,
+                                       oldPassengerStr=self.oldPassengerStr,
+                                       result=result,
+                                       ifShowPassCodeTime=ifShowPassCodeTime,
+                                       )
+                if ifShowPassCode == ""Y"":  # 如果需要验证码
+                    print(u""需要验证码"")
+                    print(u""正在使用自动识别验证码功能"")
+                    for i in range(3):
+                        randCode = getRandCode(is_auto_code=True, auto_code_type=2)
+                        checkcode = checkRandCodeAnsyn(self.session, randCode, """")
+                        if checkcode == 'TRUE':
+                            print(u""验证码通过,正在提交订单"")
+                            data['randCode'] = randCode
+                            break
+                        else:
+                            print (u""验证码有误, {0}次尝试重试"".format(i + 1))
+                    print(u""验证码超过限定次数3次，放弃此次订票机会!"")
+                g.sendGetQueueCountAsync()
+        else:
+            print(ticket.AUTO_SUBMIT_ORDER_REQUEST_F)
+            if autoSubmitOrderRequestResult.get(""messages"", """"):
+                print("""".join(autoSubmitOrderRequestResult.get(""messages"", """")))
+            elif autoSubmitOrderRequestResult.get(""validateMessages"", """"):
+                print("""".join(autoSubmitOrderRequestResult.get(""validateMessages"", """")))",72,122,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetSuccessRate.py,获取成功信息,"def __init__(self, session, secretList):
+        """"""
+        获取成功信息
+        """"""
+        self.secretList = secretList
+        self.session = session",10,15,
+data_apr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetSuccessRate.py,"secretList      9vqa9%2B%2F%2Fsdozmm22hpSeDTGqRUwSuA2D0r%2BmU%2BLZj7MK7CDuf5Ep1xpxl4Dyxfmoah%2BaB9TZSesU%0AkxBbo5oNgR1vqMfvq66VP0T7tpQtH%2BbVGBz1FolZG8jDD%2FHqnz%2FnvdBP416Og6WGS14O%2F3iBSwT8%0AkRPsNF0Vq0U082g0tlJtP%2BPn7TzW3z7TDCceMJIjFcfEOA%2BW%2BuK%2Bpy6jCQMv0TmlkXf5aKcGnE02%0APuv4I8nF%2BOWjWzv9CrJyiCZiWaXd%2Bi7p69V3a9dhF787UgS660%2BqKRFB4RLwAfic3MkAlfpGWhMY%0ACfARVQ%3D%3D#O
+_json_att
+候补一次只能补一个座位，默认取TICKET_TYPE第一个
+:return:","def data_apr(self):
+        """"""
+        secretList	9vqa9%2B%2F%2Fsdozmm22hpSeDTGqRUwSuA2D0r%2BmU%2BLZj7MK7CDuf5Ep1xpxl4Dyxfmoah%2BaB9TZSesU%0AkxBbo5oNgR1vqMfvq66VP0T7tpQtH%2BbVGBz1FolZG8jDD%2FHqnz%2FnvdBP416Og6WGS14O%2F3iBSwT8%0AkRPsNF0Vq0U082g0tlJtP%2BPn7TzW3z7TDCceMJIjFcfEOA%2BW%2BuK%2Bpy6jCQMv0TmlkXf5aKcGnE02%0APuv4I8nF%2BOWjWzv9CrJyiCZiWaXd%2Bi7p69V3a9dhF787UgS660%2BqKRFB4RLwAfic3MkAlfpGWhMY%0ACfARVQ%3D%3D#O
+        _json_att
+        候补一次只能补一个座位，默认取TICKET_TYPE第一个
+        :return:
+        """"""
+
+        ticker = TickerConfig.PASSENGER_TICKER_STR.get(TickerConfig.SET_TYPE[0])
+        data = OrderedDict()
+        data[""successSecret""] = f""{self.secretList}#{ticker}""
+        data[""_json_att""] = """"
+        return data",17,29,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/CheckRandCodeAnsyn.py,:return:,"def data_par(self):
+        """"""
+        :return:
+        """"""
+        data = {
+            ""randCode"": self.randCode,
+            ""rand"": ""randp"",
+            ""_json_att"": """",
+            ""REPEAT_SUBMIT_TOKEN"": self.token
+        }
+        return data",8,18,
+sendCheckRandCodeAnsyn,/Users/bytedance/test_repo/BytedanceQA/12306/inter/CheckRandCodeAnsyn.py,"下单验证码识别
+:return:","def sendCheckRandCodeAnsyn(self):
+        """"""
+        下单验证码识别
+        :return:
+        """"""
+        checkRandCodeAnsynUrl = self.session.urls[""checkRandCodeAnsyn""]
+        fresult = self.session.httpClint.send(checkRandCodeAnsynUrl, self.data_par())  # 校验验证码是否正确
+        return fresult['data']['msg']",20,27,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetPassengerDTOs.py,":param session: 登录实例
+:param ticket_peoples: 乘客
+:param set_type: 坐席","def __init__(self, selectObj, ticket_peoples=None, set_type=None, is_more_ticket_num=None):
+        """"""
+        :param session: 登录实例
+        :param ticket_peoples: 乘客
+        :param set_type: 坐席
+        """"""
+        if ticket_peoples is None:
+            ticket_peoples = []
+        self.session = selectObj
+        self.ticket_peoples = ticket_peoples
+        self.is_more_ticket_num = is_more_ticket_num
+        self.set_type = set_type",15,26,
+getPassengerTicketStr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetPassengerDTOs.py,"获取getPassengerTicketStr 提交对应的代号码
+:param str: 坐席
+:return:","def getPassengerTicketStr(self, set_type):
+        """"""
+        获取getPassengerTicketStr 提交对应的代号码
+        :param str: 坐席
+        :return:
+        """"""
+        passengerTicketStr = {
+            '一等座': 'M',
+            '特等座': 'P',
+            '二等座': 'O',
+            '商务座': 9,
+            '硬座': 1,
+            '无座': 1,
+            '软座': 2,
+            '软卧': 4,
+            '硬卧': 3,
+        }
+        return str(passengerTicketStr[set_type.replace(' ', '')])",46,63,
+getPassengerTicketStrListAndOldPassengerStr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetPassengerDTOs.py,"获取提交车次人内容格式
+passengerTicketStr      O,0,1,文贤平,1,43052419950223XXXX,15618715583,N_O,0,1,梁敏,1,43052719920118XXXX,,N
+oldPassengerStr 文贤平,1,43052719920118XXXX,1_梁敏,1,43052719920118XXXX,1
+ps: 如果is_more_ticket打开了的话，那就是读取联系人列表里面前符合车次数量的前几个联系人
+:return:","def getPassengerTicketStrListAndOldPassengerStr(self, secretStr, secretList):
+        """"""
+        获取提交车次人内容格式
+        passengerTicketStr	O,0,1,文贤平,1,43052419950223XXXX,15618715583,N_O,0,1,梁敏,1,43052719920118XXXX,,N
+        oldPassengerStr	文贤平,1,43052719920118XXXX,1_梁敏,1,43052719920118XXXX,1
+        ps: 如果is_more_ticket打开了的话，那就是读取联系人列表里面前符合车次数量的前几个联系人
+        :return:
+        """"""
+        passengerTicketStrList = []
+        oldPassengerStr = []
+        tickers = []
+        set_type = """"
+        if wrapcache.get(""user_info""):  # 如果缓存中有联系人方式，则读取缓存中的联系人
+            user_info = wrapcache.get(""user_info"")
+            print(u""使用缓存中查找的联系人信息"")
+        else:
+            user_info = self.sendGetPassengerDTOs()
+            wrapcache.set(""user_info"", user_info, timeout=9999999)
+        if not user_info:
+            raise PassengerUserException(ticket.DTO_NOT_IN_LIST)
+        if len(user_info) < self.is_more_ticket_num:  # 如果乘车人填错了导致没有这个乘车人的话，可能乘车人数会小于自动乘车人
+            self.is_more_ticket_num = len(user_info)
+        if secretStr:
+            set_type = self.getPassengerTicketStr(self.set_type)
+            if self.is_more_ticket_num is 1:
+                passengerTicketStrList.append(
+                    '0,' + user_info[0]['passenger_type'] + "","" + user_info[0][
+                        ""passenger_name""] + "","" +
+                    user_info[0]['passenger_id_type_code'] + "","" + user_info[0]['passenger_id_no'] + "","" +
+                    user_info[0]['mobile_no'] + ',N,' + user_info[0][""allEncStr""])
+                oldPassengerStr.append(
+                    user_info[0]['passenger_name'] + "","" + user_info[0]['passenger_id_type_code'] + "","" +
+                    user_info[0]['passenger_id_no'] + "","" + user_info[0]['passenger_type'] + '_')
+            else:
+                for i in range(self.is_more_ticket_num):
+                    passengerTicketStrList.append(
+                        '0,' + user_info[i]['passenger_type'] + "","" + user_info[i][
+                            ""passenger_name""] + "","" + user_info[i]['passenger_id_type_code'] + "","" + user_info[i][
+                            'passenger_id_no'] + "","" + user_info[i]['mobile_no'] + ',N,' + user_info[i][""allEncStr""] + '_' + set_type)
+                    oldPassengerStr.append(
+                        user_info[i]['passenger_name'] + "","" + user_info[i]['passenger_id_type_code'] + "","" +
+                        user_info[i]['passenger_id_no'] + "","" + user_info[i]['passenger_type'] + '_')
+        elif secretList:
+            """"""
+            候补订单有多少个联系人，就候补多少个联系人了，没有优先提交之说
+            1#XXXX#1#***************77X#bf6ae40d3655ae7eff005ee21d95876b38ab97a8031b464bc2f74a067e3ec957;
+            """"""
+            for user in user_info:
+                tickers.append(f""1#{user['passenger_name']}#1#{user['passenger_id_no']}#{user['allEncStr']};"")
+
+        return {
+            ""passengerTicketStrList"": set_type + "","" + "","".join(passengerTicketStrList),
+            ""passengerTicketStrByAfterLate"": """".join(tickers),
+            ""oldPassengerStr"": """".join(oldPassengerStr),
+            ""code"": ticket.SUCCESS_CODE,
+            ""set_type"": set_type,
+            ""status"": True,
+            ""user_info"": user_info,
+        }",65,123,
+loginAysnSuggest,/Users/bytedance/test_repo/BytedanceQA/12306/inter/LoginAysnSuggest.py,"登录接口
+ps: 不需要验证码
+:return:","def loginAysnSuggest(session, username, password):
+    """"""
+    登录接口
+    ps: 不需要验证码
+    :return:
+    """"""
+    loginAysnSuggestUrls = urls.get(""loginAysnSuggest"")
+    data = {
+        ""loginUserDTO.user_name"": username,
+        ""userDTO.password"":	password
+    }
+    loginAysnSuggestRsp = session.httpClint.send(urls=loginAysnSuggestUrls, data=data)
+    if loginAysnSuggestRsp and loginAysnSuggestRsp.get(""httpstatus"") is 200 and loginAysnSuggestRsp.get(""data"", {}).get(""loginCheck"") == ""Y"":
+        print(u""登录成功"")
+    else:
+        print(u""登录失败, {0} {1}"".format("""".join(loginAysnSuggestRsp.get(""messages"")), loginAysnSuggestRsp.get(""validateMessages"")))",5,20,
+getRandCode,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetRandCode.py,"识别验证码
+:return: 坐标","def getRandCode(is_auto_code, auto_code_type, result):
+    """"""
+    识别验证码
+    :return: 坐标
+    """"""
+    try:
+        if is_auto_code:
+            if auto_code_type == 1:
+                print(u""打码兔已关闭, 如需使用自动识别，请使用如果平台 auto_code_type == 2"")
+                return
+            elif auto_code_type == 2:
+                Result = v.verify(result)
+                return codexy(Ofset=Result, is_raw_input=False)
+            elif auto_code_type == 3:
+                print(""您已设置使用云打码，但是服务器资源有限，请尽快改为本地打码"" if ""CAPTCHALOCAL"" not in os.environ else ""已设置本地打码服务器"")
+                http = HTTPClient(0)
+                Result = http.send(urls.get(""autoVerifyImage""), {""imageFile"": result})
+                if Result and Result.get(""code"") is 0:
+                    return codexy(Ofset=Result.get(""data""), is_raw_input=False)
+        else:
+            img = Image.open('./tkcode.png')
+            img.show()
+            return codexy()
+    except Exception as e:
+        print(e)",15,39,
+codexy,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetRandCode.py,"获取验证码
+:return: str","def codexy(Ofset=None, is_raw_input=True):
+    """"""
+    获取验证码
+    :return: str
+    """"""
+    if is_raw_input:
+        print(u""""""
+            *****************
+            | 1 | 2 | 3 | 4 |
+            *****************
+            | 5 | 6 | 7 | 8 |
+            *****************
+            """""")
+        print(u""验证码分为8个，对应上面数字，例如第一和第二张，输入1, 2  如果开启cdn查询的话，会冲掉提示，直接鼠标点击命令行获取焦点，输入即可，不要输入空格"")
+        print(u""如果是linux无图形界面，请使用自动打码，is_auto_code: True"")
+        print(u""如果没有弹出验证码，请手动双击根目录下的tkcode.png文件"")
+        Ofset = input(u""输入对应的验证码: "")
+    if isinstance(Ofset, list):
+        select = Ofset
+    else:
+        Ofset = Ofset.replace(""，"", "","")
+        select = Ofset.split(',')
+    post = []
+    offsetsX = 0  # 选择的答案的left值,通过浏览器点击8个小图的中点得到的,这样基本没问题
+    offsetsY = 0  # 选择的答案的top值
+    for ofset in select:
+        if ofset == '1':
+            offsetsY = 77
+            offsetsX = 40
+        elif ofset == '2':
+            offsetsY = 77
+            offsetsX = 112
+        elif ofset == '3':
+            offsetsY = 77
+            offsetsX = 184
+        elif ofset == '4':
+            offsetsY = 77
+            offsetsX = 256
+        elif ofset == '5':
+            offsetsY = 149
+            offsetsX = 40
+        elif ofset == '6':
+            offsetsY = 149
+            offsetsX = 112
+        elif ofset == '7':
+            offsetsY = 149
+            offsetsX = 184
+        elif ofset == '8':
+            offsetsY = 149
+            offsetsX = 256
+        else:
+            pass
+        post.append(offsetsX)
+        post.append(offsetsY)
+    randCode = str(post).replace(']', '').replace('[', '').replace(""'"", '').replace(' ', '')
+    print(u""验证码识别坐标为{0}"".format(randCode))
+    return randCode",42,98,
+__init__,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ConfirmHB.py,人脸识别,"def __init__(self, secretList, session, tickerNo, jzdhDate):
+        """"""
+        人脸识别
+        """"""
+        self.secretList = secretList
+        self.session = session
+        self.passengerTicketStrByAfterLate = session.passengerTicketStrByAfterLate
+        self.tickerNo = tickerNo
+        self.jzdhDate = jzdhDate",8,16,
+data_apr,/Users/bytedance/test_repo/BytedanceQA/12306/inter/ConfirmHB.py,"passengerInfo   1#XXXX#1#***************77X#bf6ae40d3655ae7eff005ee21d95876b38ab97a8031b464bc2f74a067e3ec957;
+jzParam 2019-08-31#19#00
+hbTrain 5l000G177230,O#
+lkParam
+:return:","def data_apr(self):
+        """"""
+        passengerInfo	1#XXXX#1#***************77X#bf6ae40d3655ae7eff005ee21d95876b38ab97a8031b464bc2f74a067e3ec957;
+        jzParam	2019-08-31#19#00
+        hbTrain	5l000G177230,O#
+        lkParam
+        :return:
+        """"""
+        ticker = TickerConfig.PASSENGER_TICKER_STR.get(TickerConfig.SET_TYPE[0])
+        data = OrderedDict()
+        data[""passengerInfo""] = self.passengerTicketStrByAfterLate
+        data[""jzParam""] = self.jzdhDate
+        data[""hbTrain""] = f""{self.tickerNo},{ticker}#""
+        data[""lkParam""] = """"
+        return data",18,32,
+data_par,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetQueueCountAsync.py," - 字段说明
+    - train_date 时间
+    - train_no 列车编号,查询代码里面返回
+    - stationTrainCode 列车编号
+    - seatType 对应坐席
+    - fromStationTelecode 起始城市
+    - toStationTelecode 到达城市
+    - leftTicket 查询代码里面返回
+    - purpose_codes 学生还是成人
+    - _json_att 没啥卵用，还是带上吧
+:return:","def data_par(self):
+        """"""
+         - 字段说明
+            - train_date 时间
+            - train_no 列车编号,查询代码里面返回
+            - stationTrainCode 列车编号
+            - seatType 对应坐席
+            - fromStationTelecode 起始城市
+            - toStationTelecode 到达城市
+            - leftTicket 查询代码里面返回
+            - purpose_codes 学生还是成人
+            - _json_att 没啥卵用，还是带上吧
+        :return:
+        """"""
+        if sys.version_info.major is 2:
+            new_train_date = filter(None, str(time.asctime(time.strptime(self.station_dates, ""%Y-%m-%d""))).split("" ""))
+        else:
+            new_train_date = list(filter(None, str(time.asctime(time.strptime(self.station_dates, ""%Y-%m-%d""))).split("" "")))
+        data = OrderedDict()
+        data['train_date'] = ""{0} {1} {2} {3} 00:00:00 GMT+0800 (中国标准时间)"".format(
+            new_train_date[0],
+            new_train_date[1],
+            new_train_date[2] if len(new_train_date[2]) is 2 else f""0{new_train_date[2]}"",
+            new_train_date[4],
+            time.strftime(""%H:%M:%S"", time.localtime(time.time()))
+        ),
+        data[""train_no""] = self.train_no
+        data[""stationTrainCode""] = self.stationTrainCode
+        data[""seatType""] = self.set_type
+        data[""fromStationTelecode""] = self.fromStationTelecode
+        data[""toStationTelecode""] = self.toStationTelecode
+        data[""leftTicket""] = self.leftTicket
+        data[""purpose_codes""] = ""ADULT""
+        data[""_json_att""] = """"
+        return data",46,80,
+sendGetQueueCountAsync,/Users/bytedance/test_repo/BytedanceQA/12306/inter/GetQueueCountAsync.py,"请求排队接口
+:return:","def sendGetQueueCountAsync(self):
+        """"""
+        请求排队接口
+        :return:
+        """"""
+        urls = self.session.urls[""getQueueCountAsync""]
+        data = self.data_par()
+        getQueueCountAsyncResult = self.session.httpClint.send(urls, data)
+        if getQueueCountAsyncResult.get(""status"", False) and getQueueCountAsyncResult.get(""data"", False):
+            if ""status"" in getQueueCountAsyncResult and getQueueCountAsyncResult[""status""] is True:
+                if ""countT"" in getQueueCountAsyncResult[""data""]:
+                    ticket_data = getQueueCountAsyncResult[""data""][""ticket""]
+                    ticket_split = sum(map(self.conversion_int, ticket_data.split("",""))) if ticket_data.find(
+                        "","") != -1 else ticket_data
+                    if int(ticket_split) is 0:
+                        # 增加余票数为0时，将车次加入小黑屋
+                        wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                                      timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+                        print(f""排队失败，当前余票数为{ticket_split}张"")
+                        return
+                    print(u""排队成功, 当前余票还剩余: {0} 张"".format(ticket_split))
+                    c = confirmSingleForQueueAsys(session=self.session,
+                                                  passengerTicketStr=self.passengerTicketStr,
+                                                  oldPassengerStr=self.oldPassengerStr,
+                                                  result=self.result,)
+                    print(u""验证码提交安全期，等待{}MS"".format(self.ifShowPassCodeTime))
+                    time.sleep(self.ifShowPassCodeTime)
+                    c.sendConfirmSingleForQueueAsys()
+                else:
+                    print(u""排队发现未知错误{0}，将此列车 {1}加入小黑屋"".format(getQueueCountAsyncResult, self.train_no))
+                    wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                                  timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+            elif ""messages"" in getQueueCountAsyncResult and getQueueCountAsyncResult[""messages""]:
+                print(u""排队异常，错误信息：{0}, 将此列车 {1}加入小黑屋"".format(getQueueCountAsyncResult[""messages""][0], self.train_no))
+                wrapcache.set(key=self.train_no, value=datetime.datetime.now(),
+                              timeout=TickerConfig.TICKET_BLACK_LIST_TIME * 60)
+            else:
+                if ""validateMessages"" in getQueueCountAsyncResult and getQueueCountAsyncResult[""validateMessages""]:
+                    print(str(getQueueCountAsyncResult[""validateMessages""]))",85,123,

@@ -1,0 +1,2 @@
+TOKEN = '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'
+USERNAME = 'BytedanceQA'

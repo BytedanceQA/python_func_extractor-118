@@ -1,0 +1,492 @@
+name,file,docstring,content,start_line,end_line
+load_tensors,/Users/bytedance/test_repo/BytedanceQA/grok-1/checkpoint.py,Loads a set of arrays.,"def load_tensors(shaped_arrays, directory, mesh_config, tensor_indices=None):
+    """"""Loads a set of arrays.""""""
+    pool = ThreadPoolExecutor(max_workers=32)
+    fs = list()
+    num_tensors = 0
+    num_replicas = 1
+    data_model_shards = math.prod(mesh_config)
+    if tensor_indices is None:
+        iterator = enumerate(shaped_arrays)
+    else:
+        iterator = zip(tensor_indices, shaped_arrays)
+    for i, t in iterator:
+        if (i % num_replicas) == ((jax.process_index() // data_model_shards) % num_replicas):
+            idx = (
+                jax.process_index() // (num_replicas * data_model_shards) * data_model_shards
+                + jax.process_index() % data_model_shards
+            )
+            fs.append(
+                pool.submit(fast_unpickle, os.path.join(directory, f""tensor{i:05d}_{idx:03d}""))
+            )
+            num_tensors += 1
+        else:
+            fs.append(pool.submit(np.zeros, t.shape, dtype=t.dtype))
+    wait(fs)
+    return [f.result() for f in fs]",83,107
+_match,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,Return True if regexes in qs match any window of strings in tuple ks.,"def _match(qs, ks):
+    """"""Return True if regexes in qs match any window of strings in tuple ks.""""""
+    # compile regexes and force complete match
+    qts = tuple(map(lambda x: re.compile(x + ""$""), qs))
+    for i in range(len(ks) - len(qs) + 1):
+        matches = [x.match(y) for x, y in zip(qts, ks[i:])]
+        if matches and all(matches):
+            return True
+    return False",60,68
+hk_rms_norm,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,Applies a unique LayerNorm to x with default settings.,"def hk_rms_norm(
+    x: jax.Array,
+    fixed_scale=False,
+    sharding=P(None),
+) -> jax.Array:
+    """"""Applies a unique LayerNorm to x with default settings.""""""
+    ln = RMSNorm(axis=-1, create_scale=not fixed_scale, sharding=sharding)
+    return ln(x)",489,496
+make_attention_mask,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,"Mask-making helper for attention weights.
+
+In case of 1d inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`, the
+attention weights will be `[batch..., heads, len_q, len_kv]` and this
+function will produce `[batch..., 1, len_q, len_kv]`.
+
+Args:
+  query_input: a batched, flat input of query_length size
+  key_input: a batched, flat input of key_length size
+  pairwise_fn: broadcasting elementwise comparison function
+  dtype: mask return dtype
+
+Returns:
+  A `[batch..., 1, len_q, len_kv]` shaped mask for 1d attention.","def make_attention_mask(
+    query_input: jax.Array,
+    key_input: jax.Array,
+    pairwise_fn: Callable[..., Any] = jnp.multiply,
+    dtype: Any = jnp.bfloat16,
+):
+    """"""Mask-making helper for attention weights.
+
+    In case of 1d inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`, the
+    attention weights will be `[batch..., heads, len_q, len_kv]` and this
+    function will produce `[batch..., 1, len_q, len_kv]`.
+
+    Args:
+      query_input: a batched, flat input of query_length size
+      key_input: a batched, flat input of key_length size
+      pairwise_fn: broadcasting elementwise comparison function
+      dtype: mask return dtype
+
+    Returns:
+      A `[batch..., 1, len_q, len_kv]` shaped mask for 1d attention.
+    """"""
+    mask = pairwise_fn(jnp.expand_dims(query_input, axis=-1), jnp.expand_dims(key_input, axis=-2))
+    mask = jnp.expand_dims(mask, axis=-3)
+    return mask.astype(dtype)",499,522
+rotate_half,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,Obtain the rotated counterpart of each feature,"def rotate_half(
+    x: jax.Array,
+) -> jax.Array:
+    """"""Obtain the rotated counterpart of each feature""""""
+    x1, x2 = jnp.split(x, 2, axis=-1)
+    return jnp.concatenate((-x2, x1), axis=-1)",627,632
+__call__,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,Computes a linear transform of the input.,"def __call__(
+        self,
+        inputs: jax.Array,
+    ) -> jax.Array:
+        """"""Computes a linear transform of the input.""""""
+
+        fprop_dtype = inputs.dtype
+        if not inputs.shape:
+            raise ValueError(""Input must not be scalar."")
+
+        input_size = self.input_size = inputs.shape[-1]
+        output_size = self.output_size
+
+        w = hk.get_parameter(
+            ""w"", [input_size, output_size], jnp.float32, init=hk.initializers.Constant(0)
+        )
+
+        if hasattr(w, ""scales""):
+            shape = inputs.shape
+            inputs = jnp.reshape(inputs, (-1, shape[-1]))
+
+            @functools.partial(
+                shard_map,
+                mesh=self.mesh,
+                in_specs=(self.sharding, self.sharding),
+                out_specs=self.sharding,
+                check_rep=False,
+            )
+            def mul(w, s):
+                return w.astype(s.dtype) * s
+
+            w = mul(w.weight, w.scales)
+        out = jnp.dot(inputs, w.astype(fprop_dtype))
+        if self.with_bias:
+            b = hk.get_parameter(
+                ""b"", [self.output_size], jnp.float32, init=hk.initializers.Constant(0)
+            )
+            b = jnp.broadcast_to(b, out.shape)
+            out = out + b.astype(fprop_dtype)
+
+        return out",544,584
+__call__,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,Transforms input embedding sequences to output embedding sequences.,"def __call__(
+        self,
+        inputs: jax.Array,  # [B, T, D]
+        mask: jax.Array,  # [B, 1, T, T] or [B, 1, 1, T]
+        padding_mask: Optional[jax.Array],
+        layer_memory: Optional[KVMemory],
+    ) -> DecoderOutput:
+        """"""Transforms input embedding sequences to output embedding sequences.""""""
+
+        def layer_norm(x):
+            return hk_rms_norm(x)
+
+        if self.shard_activations:
+            sharding = P(self.data_axis, None, self.model_axis)
+        else:
+            sharding = P(self.data_axis, None)
+        h = with_sharding_constraint(inputs, sharding)
+
+        attn_output = MHABlock(
+            num_q_heads=self.num_q_heads,
+            num_kv_heads=self.num_kv_heads,
+            key_size=self.key_size,
+            attn_output_multiplier=self.attn_output_multiplier,
+            mesh=self.mesh,
+            data_axis=self.data_axis,
+            model_axis=self.model_axis,
+        )(layer_norm(h), mask, layer_memory)
+        h_attn = attn_output.embeddings
+
+        h_attn = layer_norm(h_attn)
+        h += h_attn
+        h = with_sharding_constraint(h, sharding)
+
+        def base_dense_block(h):
+            h = DenseBlock(
+                num_q_heads=self.num_q_heads,
+                num_kv_heads=self.num_kv_heads,
+                key_size=self.key_size,
+                widening_factor=self.widening_factor,
+                sharding_constraint=False,
+                mesh=self.mesh,
+            )(h)
+            return h
+
+        if self.num_experts > 1:
+            rank_logger.debug(""Using MoE!"")
+            router = Router(
+                num_selected_experts=self.num_selected_experts,
+                shard_activations=self.shard_activations,
+                data_axis=self.data_axis,
+                model_axis=self.model_axis,
+                mesh=self.mesh,
+            )
+            h_dense = MoELayer(
+                num_experts=self.num_experts,
+                mesh=self.mesh,
+                layer_fn=base_dense_block,
+                router=router,
+                shard_activations=self.shard_activations,
+                data_axis=self.data_axis,
+                model_axis=self.model_axis,
+            )(layer_norm(h), padding_mask)
+        else:
+            h_dense = base_dense_block(layer_norm(h))
+
+        h_dense = layer_norm(h_dense)
+        h += h_dense
+        h = with_sharding_constraint(h, sharding)
+
+        return DecoderOutput(
+            embeddings=h,
+            memory=attn_output.memory,
+        )",1030,1102
+__call__,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,"Forward pass, producing a sequence of logits.","def __call__(
+        self,
+        tokens: jax.Array,
+        memory: Optional[Memory] = None,
+        *,
+        batch: Dict[str, jax.Array] = {},
+        last_hid_only: bool = False,
+        length: Optional[jax.Array] = None,
+    ) -> LanguageModelOutput:
+        """"""Forward pass, producing a sequence of logits.""""""
+        del batch  # Unused.
+
+        config = self.config
+
+        input_mask = jnp.greater(tokens, config.pad_token)
+
+        # Embed the input tokens and positions.
+        in_out_embed = InOutEmbed(
+            self.config.vocab_size,
+            embed_dim=self.config.model_size,
+            sharding=P(None, (""data"", ""model"")),
+        )
+        input_embeddings = in_out_embed(tokens).astype(config.fprop_dtype)
+        input_embeddings = with_sharding_constraint(
+            input_embeddings, P(""data"", None, self.model.model_axis)
+        )
+        input_embeddings *= config.embedding_multiplier_scale
+
+        model_output = self.model(
+            input_embeddings,
+            input_mask,
+            memory=memory,
+        )  # [B, T, D]
+        embeddings, model_state = model_output.embeddings, model_output.memory
+        if self.model.shard_activations:
+            embeddings = with_sharding_constraint(
+                embeddings, P(""data"", None, self.model.model_axis)
+            )
+        else:
+            embeddings = with_sharding_constraint(embeddings, P(""data"", None))
+        rank_logger.debug(f""Final embedding shape: {embeddings.shape}"")
+        embeddings = layer_norm(embeddings, self.model)
+        assert embeddings.dtype == self.fprop_dtype
+
+        if last_hid_only:
+            last_step = jnp.maximum(jnp.sum(input_mask.astype(jnp.int32), axis=1) - 1, 0)
+            last_hid = jax.vmap(lambda x, i: x[i], in_axes=0, out_axes=0)(embeddings, last_step)
+            return last_hid
+
+        if length is not None:
+            last_step = jnp.maximum(length.astype(jnp.int32) - 1, 0)
+            embeddings = jax.vmap(lambda x, i: x[i], in_axes=0, out_axes=0)(embeddings, last_step)
+            embeddings = jnp.expand_dims(embeddings, axis=1)
+
+        # Decode the embeddings (here, we use tied weights).
+        rank_logger.info(embeddings.shape)
+        out = in_out_embed.decode(embeddings)
+        rank_logger.info(out.shape)
+        out *= config.output_multiplier_scale
+
+        if self.model.shard_activations:
+            out = with_sharding_constraint(out, P(""data"", None, self.model.model_axis))
+        else:
+            out = with_sharding_constraint(out, P(""data"", None))
+
+        return LanguageModelOutput(
+            logits=out,
+            model_state=model_state,
+        )",1211,1279
+__call__,/Users/bytedance/test_repo/BytedanceQA/grok-1/model.py,Transforms input embedding sequences to output embedding sequences.,"def __call__(
+        self,
+        embeddings: jax.Array,  # [B, T, D]
+        mask: jax.Array,  # [B, T]
+        memory: Optional[Memory],
+    ) -> TransformerOutput:
+        """"""Transforms input embedding sequences to output embedding sequences.""""""
+
+        fprop_dtype = embeddings.dtype
+        _, seq_len, model_size = embeddings.shape
+        padding_mask = mask.copy()
+        mask = mask[:, None, None, :]  # [B, H=1, T'=1, T]
+
+        # Compute causal mask for autoregressive sequence modelling.
+        causal_mask = jnp.tril(jnp.ones((1, 1, seq_len, seq_len))).astype(
+            fprop_dtype
+        )  # [B=1, H=1, T, T]
+        mask = mask * causal_mask  # [B, H=1, T, T]
+
+        h = embeddings
+        kv_memories = []
+
+        def block(
+            h,
+            mask,
+            padding_mask,
+            memory,
+            layer_index: Optional[int] = None,
+            widening_factor: Optional[int] = None,
+            name: Optional[str] = None,
+        ) -> DecoderOutput:
+            return DecoderLayer(
+                num_q_heads=self.num_q_heads,
+                num_kv_heads=self.num_kv_heads,
+                key_size=self.key_size,
+                widening_factor=widening_factor or self.widening_factor,
+                num_layers=self.num_layers,
+                mesh=self.mesh,
+                data_axis=self.data_axis,
+                model_axis=self.model_axis,
+                attn_output_multiplier=self.attn_output_multiplier,
+                shard_activations=self.shard_activations,
+                # MoE.
+                num_experts=self.num_experts,
+                num_selected_experts=self.num_selected_experts,
+                name=name,
+                layer_index=layer_index,
+            )(
+                h,
+                mask,
+                padding_mask,
+                memory,
+            )
+
+        for i in range(self.num_layers):
+            decoder_output = block(
+                h,
+                mask,
+                padding_mask,
+                memory.layers[i] if memory else None,
+                layer_index=i,
+                name=f""decoder_layer_{i}"",
+            )
+            h, new_kv_memory = (
+                decoder_output.embeddings,
+                decoder_output.memory,
+            )
+            kv_memories.append(new_kv_memory)
+
+        return TransformerOutput(
+            embeddings=h,
+            memory=Memory(layers=kv_memories),
+        )",1326,1398
+top_p_filter,/Users/bytedance/test_repo/BytedanceQA/grok-1/runners.py,Performs nucleus filtering on logits.,"def top_p_filter(logits: jax.Array, top_p: jax.Array) -> jax.Array:
+    """"""Performs nucleus filtering on logits.""""""
+    assert logits.ndim == top_p.ndim, f""Expected {logits.ndim} equal {top_p.ndim}""
+    sorted_logits = jax.lax.sort(logits, is_stable=False)
+    sorted_probs = jax.nn.softmax(sorted_logits)
+    threshold_idx = jnp.argmax(jnp.cumsum(sorted_probs, -1) >= 1 - top_p, axis=-1)
+    threshold_largest_logits = jnp.take_along_axis(
+        sorted_logits, threshold_idx[..., jnp.newaxis], axis=-1
+    )
+    assert threshold_largest_logits.shape == logits.shape[:-1] + (1,)
+    mask = logits >= threshold_largest_logits
+    # Set unused logits to -inf.
+    logits = jnp.where(mask, logits, -1e10)
+    return logits",84,97
+run,/Users/bytedance/test_repo/BytedanceQA/grok-1/runners.py,Generator that accepts prompts.,"def run(self):
+        """"""Generator that accepts prompts.""""""
+        runner = self.runner
+        mesh = runner.mesh
+        max_len = runner.model.sequence_len
+        batch_size = runner.batch_size
+        params = self.params
+        rngs = jax.random.split(jax.random.PRNGKey(1), batch_size)
+        with mesh:
+            memory = self.new_memory(params, batch_size, max_len)
+            settings = SampleSettings(
+                temperature=np.zeros((batch_size,), dtype=np.float32),
+                nucleus_p=np.zeros((batch_size,), dtype=np.float32),
+                mask=np.ones((batch_size, self.vocab_size), dtype=np.int32),
+                active=np.zeros((batch_size), dtype=np.int32),
+            )
+            last_output = SampleOutput(
+                token_id=np.zeros((batch_size, 1), dtype=np.int32),
+                prob=np.zeros((batch_size, 1), dtype=jnp.bfloat16),
+                top_k_token_ids=np.zeros((batch_size, TOP_K), dtype=np.int32),
+                top_k_probs=np.zeros((batch_size, TOP_K), dtype=jnp.bfloat16),
+            )
+
+            prompt = np.array([300, 400, 500, 600, 600, 700, 800])
+
+            new_settings = SampleSettings(
+                temperature=np.float32(1),
+                nucleus_p=np.float32(1),
+                mask=np.ones((self.vocab_size,), dtype=np.int32),
+                active=np.zeros((), dtype=np.int32),
+            )
+            rng_seed = np.uint64(1)
+
+            for size in self.pad_sizes:
+                if size > runner.model.sequence_len:
+                    break
+                logger.info(""Precompile {}"".format(size))
+                prompt_len = len(prompt)
+                prompt = pad_to_size(prompt, size)
+                rngs, last_output, memory, settings = self.prefill_memory(
+                    params,
+                    rngs,
+                    memory,
+                    settings,
+                    last_output,
+                    prompt,
+                    prompt_len,
+                    rng_seed,
+                    new_settings,
+                    0,
+                )
+        with runner.mesh:
+            logger.info(""Compiling..."")
+            rngs, last_output, memory = self.sample_step(
+                params, rngs, last_output, memory, settings
+            )
+            logger.info(""Done compiling."")
+
+        all_tokens = []
+        free_slots = list(range(batch_size))
+        requests = [None] * batch_size
+        first_output = [None] * batch_size
+        jax.tree_map(lambda x: x.copy_to_host_async(), last_output)
+        prev_token = last_output
+        step = 0
+        total_num_tokens = 0
+        total_num_sequences = 0
+        with mesh:
+            while True:
+                while free_slots:
+                    request: Optional[Request] = yield
+                    tokens = self.tokenizer.encode(request.prompt)
+                    temperature = request.temperature
+                    nucleus_p = request.nucleus_p
+                    rng_seed = request.rng_seed
+
+                    i = free_slots.pop()
+                    prompt = np.array(tokens, dtype=np.int32)
+                    prompt_len = len(prompt)
+                    prompt = pad_to_size(prompt, self.get_pad_bucket(prompt.shape[0]))
+                    # All tokens are allowed.
+                    mask = np.ones((self.vocab_size,), dtype=np.int32)
+
+                    new_settings = SampleSettings(
+                        temperature=np.float32(temperature),
+                        nucleus_p=np.float32(nucleus_p),
+                        mask=mask,
+                        active=np.ones((), dtype=np.int32),
+                    )
+                    rng_seed = np.uint64(rng_seed)
+                    rngs, last_output, memory, settings = self.prefill_memory(
+                        params,
+                        rngs,
+                        memory,
+                        settings,
+                        last_output,
+                        prompt,
+                        prompt_len,
+                        rng_seed,
+                        new_settings,
+                        i,
+                    )
+                    jax.tree_map(lambda x: x.copy_to_host_async(), last_output)
+                    first_output[i] = last_output
+                    requests[i] = request
+                    total_num_sequences += 1
+
+                rngs, last_output, memory = self.sample_step(
+                    params, rngs, last_output, memory, settings
+                )
+                total_num_tokens += batch_size - len(free_slots)
+
+                # prev_token should already be on the host.
+                prev_token = jax.tree_map(np.array, prev_token)
+                for i in range(batch_size):
+                    if requests[i] is not None:
+                        if first_output[i] is not None:
+                            first_output_i = jax.tree_map(np.array, first_output[i])
+                            all_tokens.append(int(first_output_i.token_id[i][0]))
+                            first_output[i] = None
+                            continue
+
+                        all_tokens.append(int(prev_token.token_id[i][0]))
+                        cont = len(all_tokens) < requests[i].max_len
+
+                        if not cont:
+                            output_str = self.tokenizer.decode(all_tokens)
+                            requests[i] = None
+                            free_slots.append(i)
+                            all_tokens = []
+                            settings = settings._replace(active=settings.active.at[i].set(0))
+                            yield output_str
+
+                jax.tree_map(lambda x: x.copy_to_host_async(), last_output)
+                prev_token = last_output
+                step += 1",442,577
