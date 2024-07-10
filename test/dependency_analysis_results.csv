@@ -1,4 +1,4 @@
-name,file,docstring,content,raw_content,start_line,end_line,classification,reason
+git branch --set-upstream-to=origin/<branch> mainname,file,docstring,content,raw_content,start_line,end_line,classification,reason
 check,a.py,,"def check():
     Ma.a()
 ","def check():
