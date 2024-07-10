@@ -1,0 +1,23 @@
+name,file,docstring,content,raw_content,start_line,end_line,classification,reason
+check,a.py,,"def check():
+    Ma.a()
+","def check():
+    Ma.a()",3,4,project-runnable,Depends on project-level items: {'Ma'}
+method_one,c.py,,"def method_one(self):
+    self.data = 10
+    helper()
+","def method_one(self):
+        self.data = 10
+        helper()",2,4,file-runnable,"Depends on file-level items: {'helper', 'self'}"
+helper,c.py,,"def helper():
+    print('Helper function')
+","def helper():
+    print(""Helper function"")",6,7,self-contained,Only uses built-in items: {'print'}
+a,da.py,,"def a(self):
+    pass
+","def a(self):
+        pass",2,3,self-contained,No dependencies
+b,da.py,,"def b(self):
+    self.a
+","def b(self):
+        self.a",5,6,file-runnable,Depends on file-level items: {'self'}
